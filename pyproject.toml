@@ -30,6 +30,10 @@ DJANGO_SETTINGS_MODULE = "config.test_settings"
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra"
+# Starlette 1.x warns that its TestClient prefers httpx2; httpx is what the project depends on.
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 source = ["src"]
