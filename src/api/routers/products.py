@@ -2,7 +2,16 @@ from fastapi import APIRouter, Response
 from fastapi import status as http_status
 
 from api.deps import FetcherDep, NotifierDep, PaginationDep
-from api.schemas import CheckStatusValue, Page, ProductCreate, ProductOut, ProductUpdate
+from api.schemas import (
+    CheckResponse,
+    CheckResultOut,
+    CheckStatusValue,
+    Page,
+    PriceChangeOut,
+    ProductCreate,
+    ProductOut,
+    ProductUpdate,
+)
 from tracker.services import products as service
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -58,3 +67,24 @@ def update_product(product_id: int, payload: ProductUpdate) -> ProductOut:
 def delete_product(product_id: int) -> Response:
     service.delete_product(product_id)
     return Response(status_code=http_status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{product_id}/history")
+def product_history(product_id: int, pagination: PaginationDep) -> Page[PriceChangeOut]:
+    changes, total = service.list_history(
+        product_id, limit=pagination.limit, offset=pagination.offset
+    )
+    return Page[PriceChangeOut](
+        items=[PriceChangeOut.from_model(change) for change in changes],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+
+
+@router.post("/{product_id}/check")
+def check_product_now(product_id: int, fetcher: FetcherDep, notifier: NotifierDep) -> CheckResponse:
+    result, product = service.run_check(product_id, fetcher=fetcher, notifier=notifier)
+    return CheckResponse(
+        result=CheckResultOut.from_result(result), product=ProductOut.from_model(product)
+    )

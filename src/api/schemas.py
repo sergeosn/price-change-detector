@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_valida
 
 from tracker.currencies import normalize_currency
 from tracker.domains import normalize_domain
-from tracker.models import DomainRule, Product
+from tracker.models import DomainRule, PriceChange, Product
+from tracker.services.checker import CheckResult
 
 # Money goes over the wire as a string with exactly two decimals: "1299.00".
 Money = Annotated[
@@ -184,3 +185,37 @@ class ProductOut(BaseModel):
             created_at=product.created_at,
             updated_at=product.updated_at,
         )
+
+
+class PriceChangeOut(BaseModel):
+    id: int
+    old_price: Money | None
+    new_price: Money
+    detected_at: datetime
+
+    @classmethod
+    def from_model(cls, change: PriceChange) -> Self:
+        return cls(
+            id=change.pk,
+            old_price=change.old_price,
+            new_price=change.new_price,
+            detected_at=change.detected_at,
+        )
+
+
+class CheckResultOut(BaseModel):
+    status: Literal["ok", "error"]
+    price: Money | None
+    changed: bool
+    error: str | None
+
+    @classmethod
+    def from_result(cls, result: CheckResult) -> Self:
+        return cls(
+            status=result.status, price=result.price, changed=result.changed, error=result.error
+        )
+
+
+class CheckResponse(BaseModel):
+    result: CheckResultOut
+    product: ProductOut

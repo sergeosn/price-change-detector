@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 
 from notifications.base import Notifier
-from tracker.models import Product
+from tracker.models import PriceChange, Product
 from tracker.services.checker import CheckResult, check_product
 from tracker.services.errors import DuplicateError, NotFoundError
 from tracker.services.fetcher import PageFetcher
@@ -69,3 +69,8 @@ def run_check(
 ) -> tuple[CheckResult, Product]:
     result = check_product(get_product(product_id), fetcher, notifier)
     return result, get_product(product_id)
+
+
+def list_history(product_id: int, *, limit: int, offset: int) -> tuple[list[PriceChange], int]:
+    changes = get_product(product_id).price_changes.all()
+    return list(changes[offset : offset + limit]), changes.count()
