@@ -66,6 +66,7 @@ def test_duplicate_url_is_409(api_client):
         {},
         {"url": "ftp://shop.example/file"},
         {"url": "not a url"},
+        {"url": "https://exa mple.com"},
         {"url": URL, "target_price": "0"},
         {"url": URL, "target_price": "-1"},
         {"url": URL, "target_price": "10.999"},

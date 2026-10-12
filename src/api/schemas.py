@@ -5,6 +5,8 @@ from decimal import Decimal
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from tracker.currencies import normalize_currency
@@ -54,6 +56,10 @@ def clean_url(value: str) -> str:
     parts = urlsplit(value)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         raise ValueError("URL must be an absolute http(s) URL")
+    try:
+        URLValidator(schemes=["http", "https"])(value)
+    except DjangoValidationError:
+        raise ValueError("URL must be a valid http(s) URL") from None
     return value
 
 
