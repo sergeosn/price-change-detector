@@ -6,6 +6,8 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from tracker.currencies import normalize_currency
 
 CENT = Decimal("0.01")
+# Largest amount the price columns can store: DecimalField(max_digits=12, decimal_places=2).
+MAX_AMOUNT = Decimal("9999999999.99")
 
 # First number in the text: digits with spaces / separators between them.
 _NUMBER_RE = re.compile(r"-?\d(?:[\d\s,.'   ]*\d)?")
@@ -39,11 +41,15 @@ def _code(match: re.Match[str] | None) -> str | None:
 def _to_amount(token: str) -> Decimal:
     try:
         amount = Decimal(_normalize_separators(token))
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError(f"Price must be positive, got {token!r}")
+        amount = amount.quantize(CENT, rounding=ROUND_HALF_UP)
     except InvalidOperation as exc:
+        # quantize() fails for digit runs longer than the decimal context precision.
         raise ValueError(f"Not a number: {token!r}") from exc
-    if not amount.is_finite() or amount <= 0:
-        raise ValueError(f"Price must be positive, got {token!r}")
-    return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+    if amount > MAX_AMOUNT:
+        raise ValueError(f"Price is too large: {token!r}")
+    return amount
 
 
 def _normalize_separators(token: str) -> str:

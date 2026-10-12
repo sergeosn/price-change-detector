@@ -35,3 +35,21 @@ def test_parse_price(text, amount, currency):
 def test_parse_price_rejects_non_prices(text):
     with pytest.raises(ValueError):
         parse_price(text)
+
+
+def test_parse_price_accepts_largest_storable_amount():
+    assert parse_price("9999999999.99") == (Decimal("9999999999.99"), None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "10000000000",
+        "999999999999999999.999",
+        # 31 digits: exceeds the decimal context precision during quantize.
+        "1" + "0" * 30,
+    ],
+)
+def test_parse_price_rejects_amounts_too_large_to_store(text):
+    with pytest.raises(ValueError):
+        parse_price(text)
