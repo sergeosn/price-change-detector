@@ -117,6 +117,29 @@ def test_existing_name_is_kept():
     assert product.name == "My iPhone"
 
 
+def test_stale_instance_does_not_duplicate_a_price_already_recorded():
+    product = make_product(current_price=Decimal("100.00"))
+    # Someone else (e.g. a manual check) recorded the new price after `product` was loaded.
+    Product.objects.filter(pk=product.pk).update(current_price=Decimal("90.00"))
+    notifier = FakeNotifier()
+
+    result = check(product, jsonld_page("90", "UAH"), notifier=notifier)
+
+    assert result == CheckResult(status="ok", price=Decimal("90.00"), changed=False, error=None)
+    assert PriceChange.objects.count() == 0
+    assert notifier.calls == []
+
+
+def test_stale_instance_does_not_overwrite_a_name_set_meanwhile():
+    product = make_product()
+    assert product.name == ""
+    Product.objects.filter(pk=product.pk).update(name="My iPhone")
+
+    check(product, jsonld_page("10", name="Apple iPhone 15"))
+
+    assert Product.objects.get(pk=product.pk).name == "My iPhone"
+
+
 def test_currency_creates_domain_rule_when_missing():
     check(make_product(), jsonld_page("10", "UAH"))
     rule = DomainRule.objects.get(domain="shop.example")

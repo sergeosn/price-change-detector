@@ -92,11 +92,17 @@ def _apply_currency(domain: str, code: str | None) -> None:
 
 
 def _record_price(product: Product, extracted: ExtractedPrice, now: datetime) -> PriceChange | None:
+    # Called inside transaction.atomic(), which holds the SQLite write lock (IMMEDIATE mode).
+    # Re-read the row: `product` may be stale (loaded at the start of a long scheduler pass),
+    # and a manual check or an edit may have changed the price or name since then.
+    fresh = Product.objects.filter(pk=product.pk).values("current_price", "name").first()
+    if fresh is None:
+        raise Product.DoesNotExist(f"Product {product.pk} was deleted during the check")
     change = None
-    if product.current_price != extracted.amount:
+    if fresh["current_price"] != extracted.amount:
         change = PriceChange.objects.create(
             product=product,
-            old_price=product.current_price,
+            old_price=fresh["current_price"],
             new_price=extracted.amount,
             detected_at=now,
         )
@@ -107,12 +113,10 @@ def _record_price(product: Product, extracted: ExtractedPrice, now: datetime) ->
         "last_error": "",
         "updated_at": now,
     }
-    if not product.name and extracted.name:
+    if not fresh["name"] and extracted.name:
         fields["name"] = extracted.name
-    # update() instead of save(): concurrent edits of other fields (API/admin) survive,
-    # and a product deleted meanwhile is detected instead of silently re-created.
-    if Product.objects.filter(pk=product.pk).update(**fields) == 0:
-        raise Product.DoesNotExist(f"Product {product.pk} was deleted during the check")
+    # update() instead of save(): concurrent edits of other fields (API/admin) survive.
+    Product.objects.filter(pk=product.pk).update(**fields)
     for field, value in fields.items():
         setattr(product, field, value)
     return change
