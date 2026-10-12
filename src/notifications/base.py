@@ -6,6 +6,10 @@ if TYPE_CHECKING:
     from tracker.models import PriceChange, Product
 
 
+class NotificationError(Exception):
+    """Delivery failed. The message never contains secrets such as bot tokens."""
+
+
 class Notifier(Protocol):
     def price_changed(self, product: "Product", change: "PriceChange") -> None:
         """Called after a new PriceChange has been committed."""

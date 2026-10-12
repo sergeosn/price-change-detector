@@ -9,7 +9,7 @@ A learning project that tracks product prices on web pages by URL. A Django admi
 - Shop currency (ISO 4217) detected from the page or set manually.
 - Django admin: products, domain rules, price history, "check now" action.
 - REST API protected by an `X-API-Key` header, Swagger UI at `/api/docs`.
-- Price change notifications go through a `Notifier` interface. The default implementation is a no-op; Telegram delivery is not implemented yet.
+- Price change notifications go through a `Notifier` interface. The default implementation is a no-op; Telegram is used when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set.
 
 ## Architecture
 
@@ -91,6 +91,14 @@ curl -s -X PATCH $API/products/1 -H "X-API-Key: $KEY" -H "Content-Type: applicat
 3. The currency belongs to the shop (`DomainRule.currency`). It is taken only from an explicit ISO code on the page (`priceCurrency`, `CAD 15.99`); symbols such as `$` are ambiguous and ignored. If the page states a code and the shop has no currency yet, it is saved automatically; if the code differs from the saved one, the check fails with `Currency mismatch`.
 4. A history record is created only when the price actually changes.
 
+## Telegram notifications
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Send the bot any message, then find your `chat_id` at `https://api.telegram.org/bot<TOKEN>/getUpdates`.
+3. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and restart the services.
+
+The bot reports every price change (except the first price found) and highlights when the target price is reached.
+
 ## Configuration
 
 All settings are environment variables; see [.env.example](.env.example) for the full list.
@@ -111,7 +119,7 @@ src/
   config/          Django settings, ASGI assembly
   tracker/         models, admin, services, run_scheduler command
   api/             FastAPI: schemas, dependencies, routers
-  notifications/   notifier interface (no-op by default)
+  notifications/   notifier interface and Telegram
 tests/
   unit/            pure logic and services
   integration/     API, admin, fetcher, scheduler
@@ -122,4 +130,3 @@ tests/
 - Shops that render prices with JavaScript (SPAs) are not supported.
 - Single user, single API key.
 - One check interval for all products (`CHECK_INTERVAL_HOURS`).
-- Telegram notifications are not implemented yet.

@@ -46,6 +46,11 @@ class DomainRule(models.Model):
         self.domain = normalize_domain(self.domain)
         self.currency = self.currency.strip().upper()
 
+    @classmethod
+    def currency_for(cls, domain: str) -> str:
+        """Currency configured for the shop, '' if unknown."""
+        return cls.objects.filter(domain=domain).values_list("currency", flat=True).first() or ""
+
 
 class CheckStatus(models.TextChoices):
     NEVER = "never", "never checked"
