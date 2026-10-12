@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    image: price-change-detector:local
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    image: price-change-detector:local
+    command: ["python", "manage.py", "run_scheduler"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
