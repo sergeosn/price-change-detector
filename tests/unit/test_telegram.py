@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -73,6 +74,18 @@ def test_first_price_is_not_sent():
     TelegramNotifier(TOKEN, "42").price_changed(product, change_for(product, None, "100.00"))
 
     assert not route.called
+
+
+@respx.mock
+def test_successful_send_does_not_log_the_token(caplog):
+    # httpx logs "HTTP Request: POST <url>" at INFO, and the URL contains the bot token.
+    product = make_product()
+    respx.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+
+    with caplog.at_level(logging.INFO):
+        TelegramNotifier(TOKEN, "42").price_changed(product, change_for(product, "1", "2"))
+
+    assert TOKEN not in caplog.text
 
 
 @respx.mock
