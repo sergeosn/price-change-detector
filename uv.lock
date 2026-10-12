@@ -516,6 +516,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "lxml" },
+    { name = "soupsieve" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -536,6 +537,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "lxml", specifier = ">=5.3" },
+    { name = "soupsieve", specifier = ">=2.5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 
