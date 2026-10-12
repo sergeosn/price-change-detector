@@ -31,7 +31,7 @@ def test_parse_price(text, amount, currency):
     assert parse_price(text) == (Decimal(amount), currency)
 
 
-@pytest.mark.parametrize("text", ["", "out of stock", "0", "0,00", "-5"])
+@pytest.mark.parametrize("text", ["", "out of stock", "0", "0,00", "-5", "0.0049"])
 def test_parse_price_rejects_non_prices(text):
     with pytest.raises(ValueError):
         parse_price(text)

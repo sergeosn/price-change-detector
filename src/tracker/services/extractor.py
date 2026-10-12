@@ -41,12 +41,15 @@ def _code(match: re.Match[str] | None) -> str | None:
 def _to_amount(token: str) -> Decimal:
     try:
         amount = Decimal(_normalize_separators(token))
-        if not amount.is_finite() or amount <= 0:
-            raise ValueError(f"Price must be positive, got {token!r}")
+        if not amount.is_finite():
+            raise ValueError(f"Not a finite number: {token!r}")
         amount = amount.quantize(CENT, rounding=ROUND_HALF_UP)
     except InvalidOperation as exc:
         # quantize() fails for digit runs longer than the decimal context precision.
         raise ValueError(f"Not a number: {token!r}") from exc
+    # Checked after rounding so that a positive value below half a cent is rejected.
+    if amount <= 0:
+        raise ValueError(f"Price must be positive, got {token!r}")
     if amount > MAX_AMOUNT:
         raise ValueError(f"Price is too large: {token!r}")
     return amount
