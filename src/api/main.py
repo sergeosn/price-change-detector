@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from api.deps import db_connection, require_api_key
-from api.routers import domain_rules, health
+from api.routers import domain_rules, health, products
 from tracker.services.errors import DuplicateError, NotFoundError
 
 API_PREFIX = "/api/v1"
@@ -26,6 +26,7 @@ def create_api() -> FastAPI:
     protected = [Depends(require_api_key), Depends(db_connection)]
     app.include_router(health.router, prefix=API_PREFIX, dependencies=[Depends(db_connection)])
     app.include_router(domain_rules.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(products.router, prefix=API_PREFIX, dependencies=protected)
     app.add_exception_handler(NotFoundError, _not_found_handler)
     app.add_exception_handler(DuplicateError, _duplicate_handler)
     return app
