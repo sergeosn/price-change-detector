@@ -3,6 +3,7 @@
 import django.core.validators
 import django.db.models.deletion
 import tracker.currencies
+from decimal import Decimal
 from django.db import migrations, models
 
 
@@ -38,7 +39,7 @@ class Migration(migrations.Migration):
                 ('domain', models.CharField(db_index=True, editable=False, max_length=255, verbose_name='domain')),
                 ('name', models.CharField(blank=True, max_length=255, verbose_name='name')),
                 ('price_selector', models.CharField(blank=True, help_text='If set, takes priority over the domain rule selector.', max_length=500, verbose_name='price CSS selector')),
-                ('target_price', models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, verbose_name='target price')),
+                ('target_price', models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(Decimal('0.01'))], verbose_name='target price')),
                 ('current_price', models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, verbose_name='current price')),
                 ('is_active', models.BooleanField(default=True, verbose_name='tracking enabled')),
                 ('last_checked_at', models.DateTimeField(blank=True, null=True, verbose_name='last checked at')),

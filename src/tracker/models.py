@@ -1,7 +1,9 @@
 """Data model: shops (DomainRule), tracked products and their price history."""
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
+from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
@@ -82,7 +84,12 @@ class Product(models.Model):
         help_text="If set, takes priority over the domain rule selector.",
     )
     target_price = models.DecimalField(
-        "target price", max_digits=12, decimal_places=2, null=True, blank=True
+        "target price",
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
     )
     current_price = models.DecimalField(
         "current price", max_digits=12, decimal_places=2, null=True, blank=True

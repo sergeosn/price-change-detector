@@ -52,6 +52,18 @@ def test_product_rejects_non_http_url():
     assert "url" in excinfo.value.message_dict
 
 
+@pytest.mark.parametrize("price", [Decimal("0"), Decimal("0.00"), Decimal("-5.00")])
+def test_product_rejects_non_positive_target_price(price):
+    with pytest.raises(ValidationError) as excinfo:
+        Product(url="https://shop.example/item", target_price=price).full_clean()
+    assert "target_price" in excinfo.value.message_dict
+
+
+def test_product_accepts_minimal_positive_and_empty_target_price():
+    Product(url="https://shop.example/a", target_price=Decimal("0.01")).full_clean()
+    Product(url="https://shop.example/b", target_price=None).full_clean()
+
+
 def test_with_currency_takes_currency_from_domain_rule():
     DomainRule.objects.create(domain="shop.example", currency="UAH")
     with_rule = Product.objects.create(url="https://shop.example/a")
