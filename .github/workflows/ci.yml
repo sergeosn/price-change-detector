@@ -13,6 +13,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
+      - name: Check for missing migrations
+        run: uv run python src/manage.py makemigrations --check --dry-run
+        env:
+          DJANGO_SETTINGS_MODULE: config.test_settings
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest --cov --cov-fail-under=85
