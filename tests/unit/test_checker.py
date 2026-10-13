@@ -170,10 +170,10 @@ def test_currency_mismatch_is_an_error_without_history():
     assert product.last_check_status == CheckStatus.ERROR
 
 
-def test_page_without_currency_code_leaves_domain_rules_alone():
+def test_page_without_currency_code_leaves_rule_currency_empty():
     result = check(make_product(price_selector=".price"), css_page("$139.99"))
     assert result.price == Decimal("139.99")
-    assert DomainRule.objects.count() == 0
+    assert DomainRule.objects.get().currency == ""
 
 
 def test_notifier_failure_does_not_fail_the_check():
@@ -198,7 +198,7 @@ def test_product_deleted_during_check_returns_error():
     assert result.status == "error"
     assert result.error == f"Product {product.pk} was deleted during the check"
     assert PriceChange.objects.count() == 0
-    assert DomainRule.objects.count() == 0
+    assert DomainRule.objects.get().currency == ""
 
 
 def test_check_time_defaults_to_now():

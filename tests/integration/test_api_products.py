@@ -174,3 +174,9 @@ def test_delete_removes_product_and_history(api_client):
     assert response.status_code == 204
     assert response.content == b""
     assert (Product.objects.count(), PriceChange.objects.count()) == (0, 0)
+
+
+def test_create_registers_the_shop_domain_rule(api_client):
+    api_client.post(BASE, json={"url": URL, "check_now": False})
+    rule = DomainRule.objects.get()
+    assert (rule.domain, rule.currency) == ("shop.example", "")

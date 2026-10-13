@@ -94,3 +94,17 @@ def test_price_changes_are_newest_first_and_deleted_with_product():
 
 def test_migrations_are_up_to_date():
     call_command("makemigrations", "--check", "--dry-run", verbosity=0)
+
+
+def test_new_product_creates_empty_domain_rule():
+    Product.objects.create(url="https://www.Shop.example/a")
+    rule = DomainRule.objects.get()
+    assert (rule.domain, rule.currency, rule.price_selector) == ("shop.example", "", "")
+
+
+def test_new_product_keeps_existing_domain_rule():
+    DomainRule.objects.create(domain="shop.example", currency="CAD", price_selector=".p")
+    Product.objects.create(url="https://shop.example/a")
+    Product.objects.create(url="https://shop.example/b")
+    rules = DomainRule.objects.values_list("domain", "currency", "price_selector")
+    assert list(rules) == [("shop.example", "CAD", ".p")]

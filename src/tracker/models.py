@@ -115,7 +115,11 @@ class Product(models.Model):
 
     def save(self, *args, **kwargs):
         self.domain = normalize_domain(self.url)
+        is_new = self._state.adding
         super().save(*args, **kwargs)
+        if is_new and self.domain:
+            # Register the shop so its currency and selector can be configured right away.
+            DomainRule.objects.get_or_create(domain=self.domain)
 
 
 class PriceChange(models.Model):
