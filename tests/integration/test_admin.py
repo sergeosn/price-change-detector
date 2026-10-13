@@ -201,3 +201,40 @@ def test_changing_a_domain_rule_marks_shop_products_due(admin_client):
     assert "1 product(s) on shop.example will be rechecked on the next scheduler pass." in (
         messages_of(response)
     )
+
+
+def test_product_actions_are_buttons_without_a_select(admin_client):
+    make_product()
+    content = admin_client.get(PRODUCTS).content.decode()
+
+    assert '<select name="action"' not in content
+    assert ">Go<" not in content
+    for value, label in [
+        ("check_now", "Check now"),
+        ("enable_tracking", "Enable tracking"),
+        ("disable_tracking", "Disable tracking"),
+        ("delete_selected", "Delete selected products"),
+    ]:
+        assert f'name="action" value="{value}">{label}</button>' in content
+
+
+def test_domain_rule_changelist_has_a_delete_button(admin_client):
+    make_product()
+    content = admin_client.get(reverse("admin:tracker_domainrule_changelist")).content.decode()
+    assert 'name="action" value="delete_selected">Delete selected domain rules</button>' in content
+
+
+def test_action_button_post_runs_the_action(admin_client):
+    product = make_product()
+    # Exactly what the action bar form submits when the "Disable tracking" button is clicked.
+    admin_client.post(
+        PRODUCTS,
+        {
+            "index": "0",
+            "select_across": "0",
+            "action": "disable_tracking",
+            "_selected_action": [product.pk],
+        },
+    )
+    product.refresh_from_db()
+    assert product.is_active is False
