@@ -88,6 +88,7 @@ def test_price_changes_are_newest_first_and_deleted_with_product():
     )
     assert list(product.price_changes.all()) == [newer, older]
     assert str(newer) == "Kindle: 100.00 → 90.00"
+    assert str(older) == "Kindle: — → 100.00"
     product.delete()
     assert PriceChange.objects.count() == 0
 

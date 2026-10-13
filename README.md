@@ -1,6 +1,14 @@
 # Price Change Detector
 
-A learning project that tracks product prices on web pages by URL. A Django admin and a FastAPI REST API share one database and one service layer; a separate scheduler process checks prices once a day and records every change.
+[![CI](https://github.com/sergeosn/price-change-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sergeosn/price-change-detector/actions/workflows/ci.yml)
+
+A personal, self-hosted service that tracks product prices on web pages by URL. A Django admin and a FastAPI REST API share one database and one service layer; a separate scheduler process checks prices once a day and records every change.
+
+## Demo
+
+![Adding a product, configuring the shop's price selector and currency, re-checking, price history and the API docs](assets/demo.gif)
+
+A product without structured price data fails its first check; the shop's domain rule is created automatically, and once a CSS selector and currency are set the product is re-checked and its price appears in CAD.
 
 ## Features
 
@@ -140,3 +148,7 @@ tests/
 - Shops that render prices with JavaScript (SPAs) are not supported.
 - Single user, single API key.
 - One check interval for all products (`CHECK_INTERVAL_HOURS`).
+
+## License
+
+Released under the [MIT License](LICENSE).

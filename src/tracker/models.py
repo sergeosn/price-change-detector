@@ -141,4 +141,5 @@ class PriceChange(models.Model):
         verbose_name_plural = "price history"
 
     def __str__(self) -> str:
-        return f"{self.product}: {self.old_price} → {self.new_price}"
+        old_price = "—" if self.old_price is None else self.old_price
+        return f"{self.product}: {old_price} → {self.new_price}"
