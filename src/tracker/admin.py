@@ -8,6 +8,7 @@ from django.utils.html import format_html
 from notifications.factory import get_notifier
 from tracker.models import CheckStatus, DomainRule, PriceChange, Product
 from tracker.services.checker import check_product
+from tracker.services.domain_rules import mark_products_due
 from tracker.services.fetcher import get_fetcher
 
 admin.site.site_header = "Price Change Detector"
@@ -78,6 +79,27 @@ class ProductAdmin(admin.ModelAdmin):
             return self.readonly_fields
         return ("url", *self.readonly_fields)
 
+    def save_model(self, request: HttpRequest, obj: Product, form, change: bool) -> None:
+        super().save_model(request, obj, form, change)
+        if not change or "price_selector" in form.changed_data:
+            request._product_to_check = obj
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        response = super().changeform_view(request, object_id, form_url, extra_context)
+        # The check runs after the admin's own transaction has committed, so the page
+        # download does not hold the SQLite write lock that the scheduler also needs.
+        product = getattr(request, "_product_to_check", None)
+        if product is not None:
+            self._check_and_report(request, product)
+        return response
+
+    def _check_and_report(self, request: HttpRequest, product: Product) -> None:
+        result = check_product(product, get_fetcher(), get_notifier())
+        if result.status == "ok":
+            self.message_user(request, f"Price found: {result.price}.", messages.SUCCESS)
+        else:
+            self.message_user(request, f"Price check failed: {result.error}", messages.WARNING)
+
     @admin.display(description="Name", ordering="name")
     def display_name(self, obj: Product) -> str:
         return obj.name or obj.url
@@ -127,6 +149,17 @@ class ProductAdmin(admin.ModelAdmin):
 class DomainRuleAdmin(admin.ModelAdmin):
     list_display = ("domain", "currency", "price_selector", "updated_at")
     search_fields = ("domain",)
+
+    def save_model(self, request: HttpRequest, obj: DomainRule, form, change: bool) -> None:
+        super().save_model(request, obj, form, change)
+        if change and not {"currency", "price_selector"} & set(form.changed_data):
+            return
+        due = mark_products_due(obj.domain)
+        if due:
+            self.message_user(
+                request,
+                f"{due} product(s) on {obj.domain} will be rechecked on the next scheduler pass.",
+            )
 
 
 @admin.register(PriceChange)

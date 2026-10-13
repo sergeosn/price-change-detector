@@ -127,3 +127,77 @@ def test_domain_rule_form_rejects_unknown_currency(admin_client):
 
 def test_price_changes_cannot_be_added_by_hand(admin_client):
     assert admin_client.get(reverse("admin:tracker_pricechange_add")).status_code == 403
+
+
+PRODUCT_FORM = {
+    "url": URL,
+    "name": "",
+    "price_selector": "",
+    "target_price": "",
+    "is_active": "on",
+    "price_changes-TOTAL_FORMS": "0",
+    "price_changes-INITIAL_FORMS": "0",
+    "price_changes-MIN_NUM_FORMS": "0",
+    "price_changes-MAX_NUM_FORMS": "1000",
+}
+
+
+@pytest.fixture
+def admin_fetcher(monkeypatch):
+    fetcher = FakeFetcher({URL: jsonld_page("100", "UAH")})
+    monkeypatch.setattr("tracker.admin.get_fetcher", lambda: fetcher)
+    monkeypatch.setattr("tracker.admin.get_notifier", FakeNotifier)
+    return fetcher
+
+
+def messages_of(response):
+    return [str(message) for message in response.context["messages"]]
+
+
+def test_adding_a_product_checks_it_right_away(admin_client, admin_fetcher):
+    response = admin_client.post(reverse("admin:tracker_product_add"), PRODUCT_FORM, follow=True)
+
+    assert admin_fetcher.calls == [URL]
+    assert "Price found: 100.00." in messages_of(response)
+
+
+def test_changing_the_selector_rechecks_the_product(admin_client, admin_fetcher):
+    product = make_product()
+    admin_fetcher.pages.clear()
+
+    response = admin_client.post(
+        reverse("admin:tracker_product_change", args=[product.pk]),
+        {**PRODUCT_FORM, "price_selector": ".price"},
+        follow=True,
+    )
+
+    assert admin_fetcher.calls == [URL]
+    assert "Price check failed: HTTP 404" in messages_of(response)
+
+
+def test_changing_other_fields_does_not_check(admin_client, admin_fetcher):
+    product = make_product()
+
+    admin_client.post(
+        reverse("admin:tracker_product_change", args=[product.pk]),
+        {**PRODUCT_FORM, "name": "Renamed"},
+    )
+
+    assert admin_fetcher.calls == []
+
+
+def test_changing_a_domain_rule_marks_shop_products_due(admin_client):
+    product = make_product(last_checked_at=datetime(2026, 10, 12, tzinfo=UTC))
+    rule = DomainRule.objects.get(domain="shop.example")
+
+    response = admin_client.post(
+        reverse("admin:tracker_domainrule_change", args=[rule.pk]),
+        {"domain": "shop.example", "currency": "CAD", "price_selector": ".price"},
+        follow=True,
+    )
+
+    product.refresh_from_db()
+    assert product.last_checked_at is None
+    assert "1 product(s) on shop.example will be rechecked on the next scheduler pass." in (
+        messages_of(response)
+    )

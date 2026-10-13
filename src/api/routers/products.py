@@ -56,8 +56,13 @@ def get_product(product_id: int) -> ProductOut:
 
 
 @router.patch("/{product_id}")
-def update_product(product_id: int, payload: ProductUpdate) -> ProductOut:
-    product = service.update_product(product_id, payload.model_dump(exclude_unset=True))
+def update_product(
+    product_id: int, payload: ProductUpdate, fetcher: FetcherDep, notifier: NotifierDep
+) -> ProductOut:
+    changes = payload.model_dump(exclude_unset=True)
+    product = service.update_product(product_id, changes)
+    if "price_selector" in changes:
+        _, product = service.run_check(product_id, fetcher=fetcher, notifier=notifier)
     return ProductOut.from_model(product)
 
 

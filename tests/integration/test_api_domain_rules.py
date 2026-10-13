@@ -1,6 +1,8 @@
 import pytest
+from django.utils import timezone
 from fastapi.testclient import TestClient
 
+from tests.helpers import make_product
 from tracker.models import DomainRule
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -132,3 +134,35 @@ def test_delete_rule(api_client):
     assert response.status_code == 204
     assert response.content == b""
     assert DomainRule.objects.count() == 0
+
+
+@pytest.mark.parametrize("payload", [{"price_selector": ".price"}, {"currency": "CAD"}])
+def test_changing_selector_or_currency_marks_shop_products_due(api_client, payload):
+    product = make_product(last_checked_at=timezone.now())
+    rule = DomainRule.objects.get(domain="shop.example")
+
+    assert api_client.patch(f"{BASE}/{rule.pk}", json=payload).status_code == 200
+
+    product.refresh_from_db()
+    assert product.last_checked_at is None
+
+
+def test_unchanged_selector_does_not_mark_products_due(api_client):
+    checked_at = timezone.now()
+    product = make_product(last_checked_at=checked_at)
+    rule = DomainRule.objects.get(domain="shop.example")
+
+    api_client.patch(f"{BASE}/{rule.pk}", json={"price_selector": ""})
+
+    product.refresh_from_db()
+    assert product.last_checked_at == checked_at
+
+
+def test_creating_a_rule_marks_existing_shop_products_due(api_client):
+    product = make_product(last_checked_at=timezone.now())
+    DomainRule.objects.all().delete()
+
+    api_client.post(BASE, json={"domain": "shop.example", "price_selector": ".price"})
+
+    product.refresh_from_db()
+    assert product.last_checked_at is None

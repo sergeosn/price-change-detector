@@ -2,7 +2,7 @@
 
 from django.db import IntegrityError, transaction
 
-from tracker.models import DomainRule
+from tracker.models import DomainRule, Product
 from tracker.services.errors import DuplicateError, NotFoundError
 
 
@@ -21,15 +21,24 @@ def get_domain_rule(rule_id: int) -> DomainRule:
 def create_domain_rule(*, domain: str, currency: str = "", price_selector: str = "") -> DomainRule:
     rule = DomainRule(domain=domain, currency=currency, price_selector=price_selector)
     _save(rule)
+    mark_products_due(rule.domain)
     return rule
 
 
 def update_domain_rule(rule_id: int, changes: dict[str, object]) -> DomainRule:
     rule = get_domain_rule(rule_id)
+    before = (rule.currency, rule.price_selector)
     for field, value in changes.items():
         setattr(rule, field, value)
     _save(rule)
+    if (rule.currency, rule.price_selector) != before:
+        mark_products_due(rule.domain)
     return rule
+
+
+def mark_products_due(domain: str) -> int:
+    """Make the shop's products due so the scheduler rechecks them with the new settings."""
+    return Product.objects.filter(domain=domain).update(last_checked_at=None)
 
 
 def delete_domain_rule(rule_id: int) -> None:

@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from tests.helpers import URL, jsonld_page, make_product
+from tests.helpers import URL, css_page, jsonld_page, make_product
 from tracker.models import CheckStatus, DomainRule, PriceChange, Product
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -180,3 +180,22 @@ def test_create_registers_the_shop_domain_rule(api_client):
     api_client.post(BASE, json={"url": URL, "check_now": False})
     rule = DomainRule.objects.get()
     assert (rule.domain, rule.currency) == ("shop.example", "")
+
+
+def test_patching_the_selector_rechecks_the_product(api_client, fake_fetcher):
+    product = make_product(last_check_status=CheckStatus.ERROR, last_error="Price not found")
+    fake_fetcher.pages[URL] = css_page("$8.93")
+
+    body = api_client.patch(f"{BASE}/{product.pk}", json={"price_selector": ".price"}).json()
+
+    assert (body["last_check_status"], body["current_price"], body["last_error"]) == (
+        "ok",
+        "8.93",
+        "",
+    )
+
+
+def test_patching_other_fields_does_not_check(api_client, fake_fetcher):
+    product = make_product()
+    api_client.patch(f"{BASE}/{product.pk}", json={"name": "Renamed"})
+    assert fake_fetcher.calls == []
