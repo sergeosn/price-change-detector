@@ -103,6 +103,16 @@ The bot reports every price change (except the first price found) and highlights
 
 All settings are environment variables; see [.env.example](.env.example) for the full list.
 
+### CORS (browser frontends)
+
+A frontend served from another origin can call the API once that origin is listed in `CORS_ALLOWED_ORIGINS` (comma-separated; empty disables CORS):
+
+```dotenv
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173
+```
+
+Allowed methods are `GET`, `POST`, `PATCH`, `DELETE`; allowed headers are `X-API-Key` and `Content-Type`; cookies are not used. The API key sent from browser JavaScript is visible to anyone using that page, so expose the API to a browser frontend only for personal or local use.
+
 ## Tests and code quality
 
 ```bash

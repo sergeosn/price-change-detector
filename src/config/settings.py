@@ -126,6 +126,8 @@ LOGGING = {
 # --- Application settings ---------------------------------------------------------
 
 API_KEY = os.environ.get("API_KEY", "")
+# Browser origins allowed to call the API (e.g. a frontend dev server); empty disables CORS.
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "")
 CHECK_INTERVAL_HOURS = env_int("CHECK_INTERVAL_HOURS", 24)
 SCHEDULER_TICK_SECONDS = env_int("SCHEDULER_TICK_SECONDS", 60)
 REQUEST_DELAY_MIN = env_float("REQUEST_DELAY_MIN", 1.0)
