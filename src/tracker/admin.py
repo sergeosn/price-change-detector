@@ -1,12 +1,20 @@
 from django.contrib import admin, messages
 from django.db import models
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from django.http import HttpRequest
 from django.utils import formats
 from django.utils.html import format_html
+from django.utils.text import Truncator
 
 from notifications.factory import get_notifier
-from tracker.models import CheckStatus, DomainRule, PriceChange, Product
+from tracker.models import (
+    CheckStatus,
+    Chunk,
+    DomainRule,
+    PriceChange,
+    Product,
+    ProductDocument,
+)
 from tracker.services.checker import check_product
 from tracker.services.domain_rules import mark_products_due
 from tracker.services.fetcher import get_fetcher
@@ -174,3 +182,61 @@ class PriceChangeAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
+
+
+class ChunkInline(admin.TabularInline):
+    model = Chunk
+    extra = 0
+    can_delete = False
+    fields = ("ordinal", "text")
+    readonly_fields = fields
+    ordering = ("ordinal",)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+# Documents and chunks are built from product pages and cannot be added or edited by hand.
+# Deleting stays allowed: otherwise the admin would refuse to delete a product, which
+# cascades to them. A deleted document is rebuilt by the next check of its product.
+@admin.register(ProductDocument)
+class ProductDocumentAdmin(admin.ModelAdmin):
+    list_display = ("product", "title", "chunk_count", "fetched_at")
+    list_select_related = ("product",)
+    search_fields = ("title", "product__name", "product__url")
+    fields = ("product", "title", "text", "content_hash", "fetched_at")
+    inlines = [ChunkInline]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[ProductDocument]:
+        return super().get_queryset(request).annotate(chunk_count=Count("chunks"))
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    @admin.display(description="Chunks", ordering="chunk_count")
+    def chunk_count(self, obj: ProductDocument) -> int:
+        return obj.chunk_count
+
+
+@admin.register(Chunk)
+class ChunkAdmin(admin.ModelAdmin):
+    list_display = ("document", "ordinal", "preview")
+    list_select_related = ("document__product",)
+    search_fields = ("text", "document__title")
+    fields = ("document", "ordinal", "text")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    @admin.display(description="Text")
+    def preview(self, obj: Chunk) -> str:
+        return Truncator(obj.text).chars(120)

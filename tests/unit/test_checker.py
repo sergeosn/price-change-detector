@@ -5,8 +5,16 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from tests.helpers import URL, FakeFetcher, FakeNotifier, css_page, jsonld_page, make_product
-from tracker.models import CheckStatus, DomainRule, PriceChange, Product
+from tests.helpers import (
+    URL,
+    FakeFetcher,
+    FakeNotifier,
+    css_page,
+    jsonld_page,
+    load_fixture,
+    make_product,
+)
+from tracker.models import CheckStatus, Chunk, DomainRule, PriceChange, Product, ProductDocument
 from tracker.services.checker import CheckResult, check_product, select_due_products
 from tracker.services.fetcher import FetchError
 
@@ -214,6 +222,78 @@ def test_product_deleted_during_check_returns_error():
     assert result.error == f"Product {product.pk} was deleted during the check"
     assert PriceChange.objects.count() == 0
     assert DomainRule.objects.get().currency == ""
+
+
+def test_successful_check_stores_the_page_text():
+    product = make_product()
+
+    result = check(product, load_fixture("content_uk.html"))
+
+    assert result.status == "ok"
+    document = ProductDocument.objects.get(product=product)
+    assert (document.title, document.fetched_at) == ("Кавомолка Arabella G55", NOW)
+    assert document.text.endswith("Країна виробництва: Італія")
+    assert list(document.chunks.values_list("ordinal", flat=True)) == [0, 1]
+
+
+def test_page_text_is_rebuilt_only_when_it_changed():
+    product = make_product()
+    page = load_fixture("content_en.html")
+    check(product, page)
+    chunk_ids = list(Chunk.objects.values_list("pk", flat=True))
+
+    # A new price, the same description and specification.
+    check(product, page.replace('"price": "329.00"', '"price": "299.00"'))
+
+    assert product.current_price == Decimal("299.00")
+    assert list(Chunk.objects.values_list("pk", flat=True)) == chunk_ids
+
+    check(product, page.replace("2 people", "3 people"))
+
+    chunk = Chunk.objects.get()
+    assert chunk.pk not in chunk_ids
+    assert "Capacity: 3 people" in chunk.text
+    assert ProductDocument.objects.count() == 1
+
+
+def test_failed_check_stores_no_page_text():
+    # The page has a description but no price.
+    html = (
+        '<html><head><meta name="description" content="A sturdy kettle."></head>'
+        "<body></body></html>"
+    )
+    assert check(make_product(), html).status == "error"
+    assert not ProductDocument.objects.exists()
+
+
+def test_page_without_text_does_not_touch_documents():
+    product = make_product()
+    with CaptureQueriesContext(connection) as queries:
+        check(product, jsonld_page("10"))
+    assert not ProductDocument.objects.exists()
+    assert not [q["sql"] for q in queries if "tracker_productdocument" in q["sql"]]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_content_failure_does_not_fail_the_price_check(caplog):
+    # The product disappears between the price being recorded and the page text being
+    # stored, so the document's foreign key is violated when its transaction commits.
+    product = make_product()
+
+    class DeletingNotifier(FakeNotifier):
+        def price_changed(self, product, change):
+            super().price_changed(product, change)
+            Product.objects.filter(pk=product.pk).delete()
+
+    notifier = DeletingNotifier()
+
+    result = check(product, load_fixture("content_en.html"), notifier=notifier)
+
+    assert result == CheckResult(status="ok", price=Decimal("329.00"), changed=True, error=None)
+    assert len(notifier.calls) == 1
+    assert not ProductDocument.objects.exists()
+    assert not Chunk.objects.exists()
+    assert f"Storing the page text of product {product.pk} failed" in caplog.text
 
 
 def test_check_time_defaults_to_now():

@@ -1,11 +1,18 @@
 """Test doubles and builders shared by test modules."""
 
 import json
+from pathlib import Path
 
 from tracker.models import PriceChange, Product
 from tracker.services.fetcher import FetchError
 
 URL = "https://shop.example/item/1"
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "html"
+
+
+def load_fixture(name: str) -> str:
+    """Sample page from tests/fixtures/html."""
+    return (FIXTURES / name).read_text(encoding="utf-8")
 
 
 class FakeFetcher:

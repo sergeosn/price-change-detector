@@ -1,4 +1,4 @@
-"""Data model: shops (DomainRule), tracked products and their price history."""
+"""Data model: shops (DomainRule), tracked products, price history and page text."""
 
 from decimal import Decimal
 
@@ -143,3 +143,45 @@ class PriceChange(models.Model):
     def __str__(self) -> str:
         old_price = "—" if self.old_price is None else self.old_price
         return f"{self.product}: {old_price} → {self.new_price}"
+
+
+class ProductDocument(models.Model):
+    """Text of a product page kept for retrieval: one document per product."""
+
+    product = models.OneToOneField(
+        Product, on_delete=models.CASCADE, related_name="document", verbose_name="product"
+    )
+    title = models.CharField("title", max_length=255, blank=True)
+    text = models.TextField("text")
+    # SHA-256 of title and text: chunks are rebuilt only when it changes.
+    content_hash = models.CharField("content hash", max_length=64)
+    fetched_at = models.DateTimeField("fetched at")
+
+    class Meta:
+        ordering = ["-fetched_at", "-id"]
+        verbose_name = "product document"
+        verbose_name_plural = "product documents"
+
+    def __str__(self) -> str:
+        return self.title or str(self.product)
+
+
+class Chunk(models.Model):
+    """A piece of a document's text; `ordinal` is its position, starting at 0."""
+
+    document = models.ForeignKey(
+        ProductDocument, on_delete=models.CASCADE, related_name="chunks", verbose_name="document"
+    )
+    ordinal = models.PositiveIntegerField("ordinal")
+    text = models.TextField("text")
+
+    class Meta:
+        ordering = ["document_id", "ordinal"]
+        constraints = [
+            models.UniqueConstraint(fields=["document", "ordinal"], name="unique_chunk_ordinal")
+        ]
+        verbose_name = "chunk"
+        verbose_name_plural = "chunks"
+
+    def __str__(self) -> str:
+        return f"{self.document} #{self.ordinal}"

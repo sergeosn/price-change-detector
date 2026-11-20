@@ -1,4 +1,4 @@
-"""Checking one product: download → extract → compare → record."""
+"""Checking one product: download → extract → compare → record → keep the page text."""
 
 import logging
 from dataclasses import dataclass
@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from notifications.base import Notifier
 from tracker.models import CheckStatus, DomainRule, PriceChange, Product
+from tracker.services.documents import sync_document
 from tracker.services.extractor import ExtractedPrice, ExtractionError, extract_price
 from tracker.services.fetcher import FetchError, PageFetcher
 
@@ -53,6 +54,7 @@ def check_product(
 
     if change is not None:
         _notify(notifier, product, change)
+    _store_page_text(product, html, now)
     return CheckResult(status="ok", price=extracted.amount, changed=change is not None, error=None)
 
 
@@ -139,6 +141,15 @@ def _record_error(product: Product, message: str, now: datetime) -> CheckResult:
     for field, value in fields.items():
         setattr(product, field, value)
     return CheckResult(status="error", price=None, changed=False, error=message)
+
+
+def _store_page_text(product: Product, html: str, now: datetime) -> None:
+    # The page text is a by-product of the check: the price is already recorded and
+    # committed, and a failure here must not turn the check into an error.
+    try:
+        sync_document(product, html, now)
+    except Exception:
+        logger.exception("Storing the page text of product %s failed", product.pk)
 
 
 def _notify(notifier: Notifier, product: Product, change: PriceChange) -> None:

@@ -81,6 +81,12 @@ Run the scheduler in another terminal (`--once` runs a single pass):
 uv run --env-file .env python src/manage.py run_scheduler
 ```
 
+Every successful check also stores the page text (description and specifications) as a document split into chunks, rebuilt only when the text changes. For products added before that, fetch it once (`--all` refetches every product):
+
+```bash
+uv run --env-file .env python src/manage.py index_content
+```
+
 ## API examples
 
 ```bash
@@ -147,7 +153,7 @@ Tests never touch the network: page downloads are replaced by fakes or `respx`.
 ```
 src/
   config/          Django settings, ASGI assembly
-  tracker/         models, admin, services, run_scheduler command
+  tracker/         models, admin, services, run_scheduler and index_content commands
   api/             FastAPI: schemas, dependencies, routers
   notifications/   notifier interface and Telegram
 tests/
