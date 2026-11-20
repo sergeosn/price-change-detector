@@ -284,6 +284,19 @@ def test_chunk_list_shows_a_short_preview(admin_client, document):
     assert first_chunk.text not in content
 
 
+def test_chunk_pages_show_the_embedding_model_but_not_the_vector(admin_client, document):
+    chunk = document.chunks.get(ordinal=0)
+    Chunk.objects.filter(pk=chunk.pk).update(embedding=[0.5] * 384, embedding_model="e5-test")
+
+    for url in (
+        reverse("admin:tracker_chunk_changelist"),
+        reverse("admin:tracker_chunk_change", args=[chunk.pk]),
+    ):
+        content = admin_client.get(url).content.decode()
+        assert "e5-test" in content
+        assert "0.5" not in content
+
+
 def test_document_page_shows_text_and_chunks_read_only(admin_client, document):
     url = reverse("admin:tracker_productdocument_change", args=[document.pk])
     content = admin_client.get(url).content.decode()

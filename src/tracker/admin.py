@@ -226,10 +226,11 @@ class ProductDocumentAdmin(admin.ModelAdmin):
 
 @admin.register(Chunk)
 class ChunkAdmin(admin.ModelAdmin):
-    list_display = ("document", "ordinal", "preview")
+    list_display = ("document", "ordinal", "preview", "embedding_model")
     list_select_related = ("document__product",)
     search_fields = ("text", "document__title")
-    fields = ("document", "ordinal", "text")
+    # The vector itself is 384 numbers and is not shown.
+    fields = ("document", "ordinal", "text", "embedding_model")
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False

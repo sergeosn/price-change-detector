@@ -1,6 +1,9 @@
 """Test doubles and builders shared by test modules."""
 
 import json
+import math
+import random
+from collections.abc import Sequence
 from pathlib import Path
 
 from tracker.models import PriceChange, Product
@@ -30,6 +33,31 @@ class FakeFetcher:
         if url not in self.pages:
             raise FetchError("HTTP 404")
         return self.pages[url]
+
+
+class FakeEmbedder:
+    """Embedder double: a repeatable unit vector per text, records the texts it was given."""
+
+    def __init__(self, model_name: str = "fake-embedder", dimensions: int = 384):
+        self.model_name = model_name
+        self.dimensions = dimensions
+        self.document_calls: list[list[str]] = []
+        self.query_calls: list[str] = []
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        self.document_calls.append(list(texts))
+        return [self.vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls.append(text)
+        return self.vector(text)
+
+    def vector(self, text: str) -> list[float]:
+        """The same text always gets the same vector, as a query and as a document."""
+        rng = random.Random(text)
+        values = [rng.uniform(-1, 1) for _ in range(self.dimensions)]
+        norm = math.sqrt(sum(value * value for value in values))
+        return [value / norm for value in values]
 
 
 class FakeNotifier:

@@ -8,6 +8,9 @@ os.environ["DATABASE_URL"] = (
     os.environ.get("TEST_DATABASE_URL") or "postgres://pcd:pcd@localhost:5432/pcd"
 )
 
+# Tests use a fake embedder; if one ever reached the real model, it must not be downloaded.
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 from config.settings import *  # noqa: E402, F403
 
 API_KEY = "test-api-key"

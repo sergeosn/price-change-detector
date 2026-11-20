@@ -7,6 +7,7 @@ from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
+from pgvector.django import HnswIndex, VectorField
 
 from tracker.currencies import validate_currency_code
 from tracker.domains import normalize_domain
@@ -174,11 +175,23 @@ class Chunk(models.Model):
     )
     ordinal = models.PositiveIntegerField("ordinal")
     text = models.TextField("text")
+    # Filled in by `manage.py embed_chunks`; NULL until then.
+    embedding = VectorField("embedding", dimensions=384, null=True, blank=True)
+    # Name of the model that produced `embedding`: after a model change the old vectors
+    # are found by this name and replaced.
+    embedding_model = models.CharField("embedding model", max_length=255, blank=True)
 
     class Meta:
         ordering = ["document_id", "ordinal"]
         constraints = [
             models.UniqueConstraint(fields=["document", "ordinal"], name="unique_chunk_ordinal")
+        ]
+        indexes = [
+            HnswIndex(
+                name="chunk_embedding_hnsw",
+                fields=["embedding"],
+                opclasses=["vector_cosine_ops"],
+            )
         ]
         verbose_name = "chunk"
         verbose_name_plural = "chunks"

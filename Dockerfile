@@ -5,14 +5,19 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
+# uv.lock pins torch to the CPU-only wheel index (see [tool.uv.sources] in pyproject.toml),
+# so no CUDA libraries end up in the image.
 RUN uv sync --frozen --no-dev
 
 FROM python:3.12-slim
-RUN useradd --create-home --uid 1000 app
+# /models holds the downloaded embedding model. It is created here so that a volume
+# mounted over it starts out owned by the app user.
+RUN useradd --create-home --uid 1000 app && install -d -o app -g app /models
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DJANGO_SETTINGS_MODULE=config.settings
+    DJANGO_SETTINGS_MODULE=config.settings \
+    HF_HOME=/models
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY src /app/src

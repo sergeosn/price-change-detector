@@ -17,6 +17,7 @@ A product without structured price data fails its first check; the shop's domain
 - Shop currency (ISO 4217) detected from the page or set manually.
 - Django admin: products, domain rules, price history, "check now" action.
 - REST API protected by an `X-API-Key` header, Swagger UI at `/api/docs`.
+- Product page text is stored in chunks with multilingual embeddings (pgvector) for retrieval.
 - Price change notifications go through a `Notifier` interface. The default implementation is a no-op; Telegram is used when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set.
 
 ## Architecture
@@ -39,7 +40,7 @@ A product without structured price data fails its first check; the shop's domain
 - **One service layer** (`src/tracker/services`) is called by the admin, the API and the scheduler.
 - **PostgreSQL with pgvector** is the only supported database. A migration enables the `vector` and `pg_trgm` extensions. The app and the scheduler write concurrently: a check locks the product row (`SELECT … FOR UPDATE`) before comparing prices, so two simultaneous checks cannot record the same change twice.
 - **The code is synchronous.** Django's async ORM still runs queries in threads and cannot use `transaction.atomic()`, so FastAPI endpoints are plain `def` functions executed in a thread pool.
-- Page fetching (`PageFetcher`) and notifications (`Notifier`) sit behind interfaces and are replaced by fakes in tests.
+- Page fetching (`PageFetcher`), embeddings (`Embedder`) and notifications (`Notifier`) sit behind interfaces and are replaced by fakes in tests.
 
 ## Quick start (Docker)
 
@@ -59,7 +60,7 @@ This starts three services: `db` (PostgreSQL), `app` (applies migrations, then s
 - Admin: http://localhost:8000/admin/
 - API docs: http://localhost:8000/api/docs
 
-The data lives in the `pgdata` Docker volume: `docker compose down` keeps it, `docker compose down -v` deletes it. PostgreSQL is published on `127.0.0.1:5432` only (database and user `pcd`); to change the default password, set `POSTGRES_PASSWORD` in `.env` before the first start.
+The data lives in the `pgdata` Docker volume and the downloaded embedding model in `model-cache`: `docker compose down` keeps them, `docker compose down -v` deletes them. PostgreSQL is published on `127.0.0.1:5432` only (database and user `pcd`); to change the default password, set `POSTGRES_PASSWORD` in `.env` before the first start.
 
 ## Local development
 
@@ -86,6 +87,14 @@ Every successful check also stores the page text (description and specifications
 ```bash
 uv run --env-file .env python src/manage.py index_content
 ```
+
+Chunks get their embeddings from a separate command. It embeds the chunks that have none, or whose embedding was made by a model other than `EMBEDDING_MODEL`, so it is also what you run after changing the model:
+
+```bash
+uv run --env-file .env python src/manage.py embed_chunks
+```
+
+The model (`intfloat/multilingual-e5-small`, 384 dimensions, about 470 MB) runs locally on the CPU and is downloaded from Hugging Face on first use: into `~/.cache/huggingface` on the host, into the `model-cache` volume in Docker (`docker compose exec app python manage.py embed_chunks`). The image installs the CPU-only build of PyTorch.
 
 ## API examples
 
@@ -146,14 +155,14 @@ uv run ruff check . && uv run ruff format --check .
 
 Tests run on PostgreSQL: pytest creates and drops its own `test_pcd` database on the Compose `db` service, so development data is not touched. Set `TEST_DATABASE_URL` to use another server (the role must be allowed to create databases and the `vector` extension). CI starts the same `pgvector/pgvector:pg17` image as a service.
 
-Tests never touch the network: page downloads are replaced by fakes or `respx`.
+Tests never touch the network: page downloads are replaced by fakes or `respx`, and embeddings by a fake embedder, so no model is ever downloaded.
 
 ## Project layout
 
 ```
 src/
   config/          Django settings, ASGI assembly
-  tracker/         models, admin, services, run_scheduler and index_content commands
+  tracker/         models, admin, services, run_scheduler, index_content and embed_chunks commands
   api/             FastAPI: schemas, dependencies, routers
   notifications/   notifier interface and Telegram
 tests/

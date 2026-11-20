@@ -24,6 +24,9 @@ services:
       DATABASE_URL: postgres://pcd:${POSTGRES_PASSWORD:-pcd}@db:5432/pcd
     ports:
       - "8000:8000"
+    volumes: &model-cache
+      # The embedding model is downloaded once and survives image rebuilds.
+      - model-cache:/models
     depends_on: &wait-for-db
       db:
         condition: service_healthy
@@ -45,6 +48,7 @@ services:
     command: ["python", "manage.py", "run_scheduler"]
     env_file: .env
     environment: *database
+    volumes: *model-cache
     depends_on:
       <<: *wait-for-db
       app:
@@ -53,3 +57,4 @@ services:
 
 volumes:
   pgdata:
+  model-cache:
