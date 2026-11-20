@@ -166,26 +166,25 @@ uv run --env-file .env python src/manage.py eval_search evals/search_queries.jso
 - **MRR** — the mean of `1 / rank` of the first relevant result among the top 10; 0 when there is none.
 - **p50, p95** — latency percentiles of the whole search call, the query embedding included. One unmeasured query per mode comes first, so loading the model is not counted.
 
-The numbers are also written as JSON next to the input file (`evals/search_queries.results.json`); `--output` writes them elsewhere. In Docker `./evals` is mounted read-only, so the numbers go to `./data`:
+The numbers are also written as JSON next to the input file (`evals/search_queries.results.json`); `--output` writes them elsewhere. In Docker `./evals` is mounted into the containers, so the same file appears on the host:
 
 ```bash
-docker compose exec app python manage.py eval_search /app/evals/search_queries.jsonl \
-  --output /app/data/search_queries.results.json
+docker compose exec app python manage.py eval_search /app/evals/search_queries.jsonl
 ```
 
-Results (placeholder: run the command and fill in the numbers):
+Results on 152 products (77 from `princessauto.com`, 75 from `autoshack.ca`) and 40 queries (20 `model_number`, 20 `description`), with `intfloat/multilingual-e5-small` embeddings and the top 10 results per query:
 
-| Mode | Kind | Recall@1 | Recall@5 | MRR | p50, ms | p95, ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| `vector` | overall | – | – | – | – | – |
-| `vector` | `model_number` | – | – | – | – | – |
-| `vector` | `description` | – | – | – | – | – |
-| `lexical` | overall | – | – | – | – | – |
-| `lexical` | `model_number` | – | – | – | – | – |
-| `lexical` | `description` | – | – | – | – | – |
-| `hybrid` | overall | – | – | – | – | – |
-| `hybrid` | `model_number` | – | – | – | – | – |
-| `hybrid` | `description` | – | – | – | – | – |
+| Mode | Kind | Queries | Recall@1 | Recall@5 | MRR | p50, ms | p95, ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `vector` | overall | 40 | 0.475 | 0.615 | 0.562 | 15.4 | 48.8 |
+| `vector` | `model_number` | 20 | 0.550 | 0.700 | 0.632 | 15.1 | 65.5 |
+| `vector` | `description` | 20 | 0.400 | 0.529 | 0.492 | 16.3 | 19.2 |
+| `lexical` | overall | 40 | 0.600 | 0.594 | 0.604 | 4.3 | 6.2 |
+| `lexical` | `model_number` | 20 | 1.000 | 1.000 | 1.000 | 4.1 | 4.8 |
+| `lexical` | `description` | 20 | 0.200 | 0.188 | 0.207 | 4.7 | 6.2 |
+| `hybrid` | overall | 40 | 0.650 | 0.733 | 0.706 | 19.8 | 77.6 |
+| `hybrid` | `model_number` | 20 | 0.950 | 1.000 | 0.963 | 17.6 | 65.6 |
+| `hybrid` | `description` | 20 | 0.350 | 0.467 | 0.450 | 20.2 | 80.4 |
 
 ## How prices and currencies are extracted
 

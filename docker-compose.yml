@@ -29,9 +29,9 @@ services:
       - model-cache:/models
       # Files the seed, export and eval commands read and write, shared with the host.
       - ./data:/app/data
-      # Labelled search queries for eval_search. Read-only: the command cannot write its
-      # numbers next to them here, so point --output at /app/data.
-      - ./evals:/app/evals:ro
+      # Labelled search queries for eval_search. Writable: the command writes its numbers
+      # as JSON next to the queries file.
+      - ./evals:/app/evals
     depends_on: &wait-for-db
       db:
         condition: service_healthy
