@@ -144,6 +144,49 @@ curl -s -G $API/search -H "X-API-Key: $KEY" --data-urlencode "q=WH-1000XM5" -d m
 
 Scores are comparable only within one response. Vector and hybrid search need embeddings (`embed_chunks`) and load the embedding model on the first query; lexical search needs neither. A product without stored page text is not found.
 
+## Search quality
+
+`evals/search_queries.jsonl` holds labelled queries, one JSON object per line: `{"query", "kind", "relevant": [urls]}`. The URLs are products of `data/corpus.jsonl`, so the database has to hold that corpus with its embeddings.
+
+| Kind | Query | Relevant |
+| --- | --- | --- |
+| `model_number` | A model or article number from a product's name or text | That product, and the same product in other shops |
+| `description` | What a buyer would type, in Ukrainian, Russian or English | Every product that fits |
+| `cross_shop` | The full name of a product as one shop writes it | The same product in the other shop |
+
+The file has 20 `model_number` and 20 `description` queries. It has no `cross_shop` queries yet: the two shops of the current corpus sell no product in common.
+
+`eval_search` runs every query in the `vector`, `lexical` and `hybrid` modes and prints a table per mode, overall and per kind. No LLM is involved: a result counts when its URL is in `relevant`.
+
+```bash
+uv run --env-file .env python src/manage.py eval_search evals/search_queries.jsonl
+```
+
+- **recall@k** — the share of the relevant products found in the top `k`, out of those that fit there (with three relevant products recall@1 is 1 when the first result is one of them).
+- **MRR** — the mean of `1 / rank` of the first relevant result among the top 10; 0 when there is none.
+- **p50, p95** — latency percentiles of the whole search call, the query embedding included. One unmeasured query per mode comes first, so loading the model is not counted.
+
+The numbers are also written as JSON next to the input file (`evals/search_queries.results.json`); `--output` writes them elsewhere. In Docker `./evals` is mounted read-only, so the numbers go to `./data`:
+
+```bash
+docker compose exec app python manage.py eval_search /app/evals/search_queries.jsonl \
+  --output /app/data/search_queries.results.json
+```
+
+Results (placeholder: run the command and fill in the numbers):
+
+| Mode | Kind | Recall@1 | Recall@5 | MRR | p50, ms | p95, ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| `vector` | overall | – | – | – | – | – |
+| `vector` | `model_number` | – | – | – | – | – |
+| `vector` | `description` | – | – | – | – | – |
+| `lexical` | overall | – | – | – | – | – |
+| `lexical` | `model_number` | – | – | – | – | – |
+| `lexical` | `description` | – | – | – | – | – |
+| `hybrid` | overall | – | – | – | – | – |
+| `hybrid` | `model_number` | – | – | – | – | – |
+| `hybrid` | `description` | – | – | – | – | – |
+
 ## How prices and currencies are extracted
 
 1. The page is downloaded with a plain HTTP request (JavaScript is not executed).
@@ -193,6 +236,7 @@ src/
   tracker/         models, admin, services, management commands (run_scheduler, seed_products, ...)
   api/             FastAPI: schemas, dependencies, routers
   notifications/   notifier interface and Telegram
+evals/             labelled search queries for eval_search
 tests/
   unit/            pure logic and services
   integration/     API, admin, fetcher, scheduler

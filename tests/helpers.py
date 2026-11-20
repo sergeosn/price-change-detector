@@ -1,5 +1,6 @@
 """Test doubles and builders shared by test modules."""
 
+import itertools
 import json
 import math
 import random
@@ -73,6 +74,28 @@ class FakeEmbedder:
             values = [rng.uniform(-1, 1) for _ in range(self.dimensions)]
         norm = math.sqrt(sum(value * value for value in values))
         return [value / norm for value in values]
+
+
+class FakeClock:
+    """Clock double for code that reads the time before and after a call it measures.
+
+    Every second reading is the next of `durations` (in seconds, repeated) later than the
+    one before it, as if the measured call took that long. `advance` moves the time by hand.
+    """
+
+    def __init__(self, durations: Sequence[float]):
+        self._durations = itertools.cycle(durations)
+        self._now = 0.0
+        self._measuring = False
+
+    def __call__(self) -> float:
+        if self._measuring:
+            self._now += next(self._durations)
+        self._measuring = not self._measuring
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        self._now += seconds
 
 
 class FakeNotifier:
