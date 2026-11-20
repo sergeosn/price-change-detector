@@ -83,6 +83,12 @@ Run the scheduler in another terminal (`--once` runs a single pass):
 uv run --env-file .env python src/manage.py run_scheduler
 ```
 
+To add many products at once, put their URLs in a text file, one per line. URLs that already exist and lines that are not http(s) URLs are skipped (the invalid ones are listed), and the command prints how many products it created, skipped and rejected. Nothing is fetched: the scheduler checks the new products on its next pass.
+
+```bash
+uv run --env-file .env python src/manage.py seed_products urls.txt
+```
+
 Every successful check also stores the page text (description and specifications) as a document split into chunks, rebuilt only when the text changes. For products added before that, fetch it once (`--all` refetches every product):
 
 ```bash
@@ -96,6 +102,12 @@ uv run --env-file .env python src/manage.py embed_chunks
 ```
 
 The model (`intfloat/multilingual-e5-small`, 384 dimensions, about 470 MB) runs locally on the CPU and is downloaded from Hugging Face on first use: into `~/.cache/huggingface` on the host, into the `model-cache` volume in Docker (`docker compose exec app python manage.py embed_chunks`). The image installs the CPU-only build of PyTorch.
+
+`export_corpus` writes `data/corpus.jsonl`: one JSON line per product with its `url`, `name`, `domain` and `text`, the first 1500 characters of its document (empty for a product without one). `--output` writes to another file.
+
+```bash
+uv run --env-file .env python src/manage.py export_corpus
+```
 
 ## API examples
 
@@ -178,7 +190,7 @@ Tests never touch the network: page downloads are replaced by fakes or `respx`, 
 ```
 src/
   config/          Django settings, ASGI assembly
-  tracker/         models, admin, services, run_scheduler, index_content and embed_chunks commands
+  tracker/         models, admin, services, management commands (run_scheduler, seed_products, ...)
   api/             FastAPI: schemas, dependencies, routers
   notifications/   notifier interface and Telegram
 tests/
