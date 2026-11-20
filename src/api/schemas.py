@@ -13,6 +13,7 @@ from tracker.currencies import normalize_currency
 from tracker.domains import normalize_domain
 from tracker.models import DomainRule, PriceChange, Product
 from tracker.services.checker import CheckResult
+from tracker.services.search import SearchMode, SearchResult
 
 # Money goes over the wire as a string with exactly two decimals: "1299.00".
 Money = Annotated[
@@ -225,3 +226,32 @@ class CheckResultOut(BaseModel):
 class CheckResponse(BaseModel):
     result: CheckResultOut
     product: ProductOut
+
+
+class SearchItemOut(BaseModel):
+    """A found product with the chunk of its page that matches the query best."""
+
+    product_id: int
+    product_name: str
+    product_url: str
+    chunk_id: int
+    # Comparable only within one response: every mode has its own scale.
+    score: float
+    text: str
+
+    @classmethod
+    def from_result(cls, result: SearchResult) -> Self:
+        return cls(
+            product_id=result.product.pk,
+            product_name=result.product.name,
+            product_url=result.product.url,
+            chunk_id=result.chunk.pk,
+            score=result.score,
+            text=result.chunk.text,
+        )
+
+
+class SearchResponse(BaseModel):
+    query: str
+    mode: SearchMode
+    items: list[SearchItemOut]

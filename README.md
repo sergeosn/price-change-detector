@@ -18,6 +18,7 @@ A product without structured price data fails its first check; the shop's domain
 - Django admin: products, domain rules, price history, "check now" action.
 - REST API protected by an `X-API-Key` header, Swagger UI at `/api/docs`.
 - Product page text is stored in chunks with multilingual embeddings (pgvector) for retrieval.
+- Hybrid search over the page text: by meaning (embeddings), by words and model numbers (full-text search, name trigrams), or both.
 - Price change notifications go through a `Notifier` interface. The default implementation is a no-op; Telegram is used when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set.
 
 ## Architecture
@@ -114,7 +115,22 @@ curl -s $API/products/1/history -H "X-API-Key: $KEY"            # price history
 curl -s -X POST $API/products/1/check -H "X-API-Key: $KEY"      # check now
 curl -s -X PATCH $API/products/1 -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
   -d '{"is_active": false}'
+
+# Search the page text; mode is hybrid (default), lexical or vector
+curl -s -G $API/search -H "X-API-Key: $KEY" --data-urlencode "q=WH-1000XM5" -d mode=hybrid -d limit=10
 ```
+
+## Search
+
+`GET /api/v1/search?q=...&mode=hybrid&limit=10` searches the chunks of the stored page text and returns one result per product: its best chunk with the score and the text.
+
+| Mode | How it ranks | Score |
+| --- | --- | --- |
+| `vector` | Cosine distance between the query embedding and the chunk embeddings (HNSW index). Finds paraphrases and other languages. | Cosine similarity |
+| `lexical` | PostgreSQL full-text search with the `simple` configuration (no stemming, any query word may match; GIN index on a stored `tsvector`) plus `pg_trgm` word similarity of the query to the product name (GIN trigram index). Finds exact words and model numbers. | Text rank + name similarity |
+| `hybrid` | Reciprocal rank fusion of the two rankings: a chunk gets `1 / (60 + rank)` from each. | Sum of both |
+
+Scores are comparable only within one response. Vector and hybrid search need embeddings (`embed_chunks`) and load the embedding model on the first query; lexical search needs neither. A product without stored page text is not found.
 
 ## How prices and currencies are extracted
 

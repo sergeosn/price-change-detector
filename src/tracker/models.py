@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
@@ -108,6 +110,10 @@ class Product(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        indexes = [
+            # Trigram index for search by name: finds model numbers despite typos.
+            GinIndex(name="product_name_trgm", fields=["name"], opclasses=["gin_trgm_ops"])
+        ]
         verbose_name = "product"
         verbose_name_plural = "products"
 
@@ -180,6 +186,14 @@ class Chunk(models.Model):
     # Name of the model that produced `embedding`: after a model change the old vectors
     # are found by this name and replaced.
     embedding_model = models.CharField("embedding model", max_length=255, blank=True)
+    # Kept up to date by PostgreSQL. The "simple" configuration does no stemming and drops
+    # no stop words: the texts are multilingual and model numbers must stay intact.
+    search_vector = models.GeneratedField(
+        expression=SearchVector("text", config="simple"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+        verbose_name="search vector",
+    )
 
     class Meta:
         ordering = ["document_id", "ordinal"]
@@ -191,7 +205,8 @@ class Chunk(models.Model):
                 name="chunk_embedding_hnsw",
                 fields=["embedding"],
                 opclasses=["vector_cosine_ops"],
-            )
+            ),
+            GinIndex(name="chunk_search_vector_gin", fields=["search_vector"]),
         ]
         verbose_name = "chunk"
         verbose_name_plural = "chunks"

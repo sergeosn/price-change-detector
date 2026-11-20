@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Registers the trigram lookups used by search.
+    "django.contrib.postgres",
     "tracker",
 ]
 

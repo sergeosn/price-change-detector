@@ -12,6 +12,7 @@ from fastapi.security import APIKeyHeader
 
 from notifications.base import Notifier
 from notifications.factory import get_notifier
+from tracker.services.embedder import Embedder, get_embedder
 from tracker.services.fetcher import PageFetcher, get_fetcher
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -54,6 +55,11 @@ def get_price_notifier() -> Notifier:
     return get_notifier()
 
 
+def get_query_embedder() -> Embedder:
+    return get_embedder()
+
+
 PaginationDep = Annotated[Pagination, Depends(pagination)]
 FetcherDep = Annotated[PageFetcher, Depends(get_page_fetcher)]
 NotifierDep = Annotated[Notifier, Depends(get_price_notifier)]
+EmbedderDep = Annotated[Embedder, Depends(get_query_embedder)]
