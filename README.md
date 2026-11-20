@@ -4,6 +4,15 @@
 
 A personal, self-hosted service that tracks product prices on web pages by URL. A Django admin and a FastAPI REST API share one PostgreSQL database and one service layer; a separate scheduler process checks prices once a day and records every change.
 
+## Retrieval-augmented Q&A
+
+Besides prices, the service answers questions about the tracked products from the text of their pages.
+
+- **What is indexed.** Every successful check stores the page text of the product (description and specifications) as a document split into chunks. Each chunk gets a multilingual embedding (`intfloat/multilingual-e5-small`, pgvector) and a full-text index; the product name gets a trigram index.
+- **Search.** `GET /api/v1/search` ranks the chunks by meaning (`vector`), by words and model numbers (`lexical`), or by both rankings fused (`hybrid`), and returns one result per product. See [Search](#search).
+- **Answers.** `POST /api/v1/ask` retrieves the five best chunks with the hybrid search and has an LLM answer from them alone. The answer cites the products it is based on; when the chunks do not hold the answer, it says so instead of guessing. See [Ask](#ask).
+- **Numbers.** [Search quality](#search-quality) has recall, MRR and latency of every search mode on 40 labelled queries (`eval_search`). [Answers](#answers) has the share of right answers, latency and tokens on 30 labelled questions (`eval_answers`).
+
 ## Demo
 
 ![Adding a product, configuring the shop's price selector and currency, re-checking, price history and the API docs](assets/demo.gif)
@@ -214,6 +223,56 @@ Results on 152 products (77 from `princessauto.com`, 75 from `autoshack.ca`) and
 | `hybrid` | `model_number` | 20 | 0.950 | 1.000 | 0.963 | 17.6 | 65.6 |
 | `hybrid` | `description` | 20 | 0.350 | 0.467 | 0.450 | 20.2 | 80.4 |
 
+## Answers
+
+`evals/qa.jsonl` holds 30 labelled questions about the same corpus, one JSON object per line:
+
+| Questions | Line | Meaning |
+| --- | --- | --- |
+| 24 the corpus answers | `{"question", "answerable": true, "source_url", "must_contain": [strings]}` | `source_url` is the product whose page text holds the answer; `must_contain` is one or two short facts from that text |
+| 6 it cannot answer | `{"question", "answerable": false}` | A fact no page states (a warranty, a weight) or a product no shop of the corpus sells |
+
+`eval_answers` puts every question to the code behind `POST /api/v1/ask` with its defaults (hybrid search, five chunks), so it needs the `PCD_LLM_*` settings and the corpus with its embeddings in the database:
+
+```bash
+uv run --env-file .env python src/manage.py eval_answers evals/qa.jsonl
+```
+
+The answers are scored by code only, no LLM judges them:
+
+- **answerable** — the `answerable` flag of the answer equals the label. Counted over all questions.
+- **sources** — the cited products include `source_url`. Counted over the questions the corpus answers.
+- **must_contain** — the answer text has every `must_contain` string, ignoring case. Counted over the same questions. The match is literal: `20000` does not match `20,000`.
+- **p50, p95** — latency percentiles of the whole call, the search and the LLM together. One unmeasured search comes first, so loading the embedding model is not counted.
+- **tokens** — the sum of what the LLM API reports for every question.
+
+A question the corpus answers but the LLM calls unanswerable fails all three checks. A question whose answer the endpoint would reject with `502` (a failed LLM call, a citation of a chunk that was not retrieved) fails its checks too, is left out of the latency and is reported in a warning. `--verbosity 2` lists every question that missed a check.
+
+In Docker:
+
+```bash
+docker compose exec app python manage.py eval_answers /app/evals/qa.jsonl
+```
+
+Results on 152 products, with five chunks per question:
+
+| Check | Correct | Total | Share |
+|---|---|---|---|
+| Answerable or refused correctly | 29 | 30 | 96.7% |
+| Expected source cited | 23 | 24 | 95.8% |
+| Expected facts in the answer | 23 | 24 | 95.8% |
+
+End-to-end latency (retrieval and generation): p50 691 ms, p95 1084 ms.
+Tokens for all 30 questions: 38,125 (36,383 prompt, 1,742 completion), about 1,270 per question.
+
+The set has 30 questions: 24 answerable from one product page and 6 the corpus cannot answer. It was drafted by an LLM from the indexed pages and reviewed by hand; scoring is done by code, not by a model.
+
+The source and fact checks count the 24 answerable questions.
+
+Model: `bedrock_mantle/openai/gpt-5.6-luna` through a LiteLLM proxy; embeddings: `intfloat/multilingual-e5-small` on CPU.
+
+Limitation: questions drafted from the same pages they are answered from make the set easier than real user questions, so treat these numbers as an upper bound.
+
 ## How prices and currencies are extracted
 
 1. The page is downloaded with a plain HTTP request (JavaScript is not executed).
@@ -263,7 +322,7 @@ src/
   tracker/         models, admin, services, management commands (run_scheduler, seed_products, ...)
   api/             FastAPI: schemas, dependencies, routers
   notifications/   notifier interface and Telegram
-evals/             labelled search queries for eval_search
+evals/             labelled queries for eval_search, labelled questions for eval_answers
 tests/
   unit/            pure logic and services
   integration/     API, admin, fetcher, scheduler

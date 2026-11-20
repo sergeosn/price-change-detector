@@ -4,7 +4,7 @@ import itertools
 import json
 import math
 import random
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from django.utils import timezone
@@ -81,6 +81,7 @@ class FakeAnswerer:
     """Answerer double: gives `reply` with `usage` and records what it was asked.
 
     Without a `reply` it answers "Fake answer" and cites the first chunk it was given.
+    `replies` sets the reply to chosen questions; an exception there is raised instead.
     """
 
     def __init__(
@@ -88,8 +89,10 @@ class FakeAnswerer:
         reply: SubmittedAnswer | None = None,
         usage: TokenUsage | None = None,
         error: Exception | None = None,
+        replies: Mapping[str, SubmittedAnswer | Exception] | None = None,
     ):
         self.reply = reply
+        self.replies = dict(replies or {})
         self.usage = usage or TokenUsage(prompt_tokens=120, completion_tokens=30, total_tokens=150)
         self.error = error
         self.calls: list[tuple[str, list[ContextChunk]]] = []
@@ -98,9 +101,11 @@ class FakeAnswerer:
         self.calls.append((question, list(chunks)))
         if self.error is not None:
             raise self.error
-        reply = self.reply or SubmittedAnswer(
+        reply = self.replies.get(question, self.reply) or SubmittedAnswer(
             answerable=True, answer="Fake answer", source_chunk_ids=[chunks[0].chunk_id]
         )
+        if isinstance(reply, Exception):
+            raise reply
         return Generation(answer=reply, usage=self.usage)
 
 

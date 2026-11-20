@@ -144,8 +144,8 @@ def _summarize(outcomes: Sequence[_Outcome]) -> Metrics:
         recall_at_1=_mean([_recall(outcome, 1) for outcome in outcomes]),
         recall_at_5=_mean([_recall(outcome, 5) for outcome in outcomes]),
         mrr=_mean([_reciprocal_rank(outcome) for outcome in outcomes]),
-        latency_p50_ms=_percentile(latencies, 50),
-        latency_p95_ms=_percentile(latencies, 95),
+        latency_p50_ms=percentile(latencies, 50),
+        latency_p95_ms=percentile(latencies, 95),
     )
 
 
@@ -165,7 +165,7 @@ def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values)
 
 
-def _percentile(ordered: Sequence[float], percent: float) -> float:
+def percentile(ordered: Sequence[float], percent: float) -> float:
     """Percentile of sorted values, interpolated linearly between the two nearest."""
     position = (len(ordered) - 1) * percent / 100
     lower = math.floor(position)
