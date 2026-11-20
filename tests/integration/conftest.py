@@ -1,12 +1,17 @@
-"""API test fixtures: the FastAPI app with fake fetcher/notifier and HTTP clients."""
+"""API test fixtures: the FastAPI app with fake fetcher/notifier/embedder/answerer and HTTP clients."""
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.deps import get_page_fetcher, get_price_notifier
+from api.deps import (
+    get_page_fetcher,
+    get_price_notifier,
+    get_query_embedder,
+    get_question_answerer,
+)
 from api.main import create_api
-from tests.helpers import FakeFetcher, FakeNotifier
+from tests.helpers import FakeAnswerer, FakeEmbedder, FakeFetcher, FakeNotifier
 
 API_KEY = "test-api-key"
 
@@ -22,8 +27,20 @@ def fake_notifier() -> FakeNotifier:
 
 
 @pytest.fixture
-def api_app(fake_fetcher, fake_notifier) -> FastAPI:
+def fake_embedder() -> FakeEmbedder:
+    return FakeEmbedder()
+
+
+@pytest.fixture
+def fake_answerer() -> FakeAnswerer:
+    return FakeAnswerer()
+
+
+@pytest.fixture
+def api_app(fake_fetcher, fake_notifier, fake_embedder, fake_answerer) -> FastAPI:
     app = create_api()
+    app.dependency_overrides[get_question_answerer] = lambda: fake_answerer
+    app.dependency_overrides[get_query_embedder] = lambda: fake_embedder
     app.dependency_overrides[get_page_fetcher] = lambda: fake_fetcher
     app.dependency_overrides[get_price_notifier] = lambda: fake_notifier
     return app

@@ -1,0 +1,91 @@
+{
+  "queries": 40,
+  "depth": 10,
+  "embedding_model": "intfloat/multilingual-e5-small",
+  "modes": {
+    "vector": {
+      "overall": {
+        "queries": 40,
+        "recall_at_1": 0.475,
+        "recall_at_5": 0.6146,
+        "mrr": 0.5619,
+        "latency_p50_ms": 15.3959,
+        "latency_p95_ms": 48.8258
+      },
+      "kinds": {
+        "model_number": {
+          "queries": 20,
+          "recall_at_1": 0.55,
+          "recall_at_5": 0.7,
+          "mrr": 0.6321,
+          "latency_p50_ms": 15.0804,
+          "latency_p95_ms": 65.5393
+        },
+        "description": {
+          "queries": 20,
+          "recall_at_1": 0.4,
+          "recall_at_5": 0.5292,
+          "mrr": 0.4917,
+          "latency_p50_ms": 16.2621,
+          "latency_p95_ms": 19.2305
+        }
+      }
+    },
+    "lexical": {
+      "overall": {
+        "queries": 40,
+        "recall_at_1": 0.6,
+        "recall_at_5": 0.5938,
+        "mrr": 0.6036,
+        "latency_p50_ms": 4.3333,
+        "latency_p95_ms": 6.2147
+      },
+      "kinds": {
+        "model_number": {
+          "queries": 20,
+          "recall_at_1": 1.0,
+          "recall_at_5": 1.0,
+          "mrr": 1.0,
+          "latency_p50_ms": 4.139,
+          "latency_p95_ms": 4.824
+        },
+        "description": {
+          "queries": 20,
+          "recall_at_1": 0.2,
+          "recall_at_5": 0.1875,
+          "mrr": 0.2071,
+          "latency_p50_ms": 4.7359,
+          "latency_p95_ms": 6.2278
+        }
+      }
+    },
+    "hybrid": {
+      "overall": {
+        "queries": 40,
+        "recall_at_1": 0.65,
+        "recall_at_5": 0.7333,
+        "mrr": 0.7061,
+        "latency_p50_ms": 19.804,
+        "latency_p95_ms": 77.6082
+      },
+      "kinds": {
+        "model_number": {
+          "queries": 20,
+          "recall_at_1": 0.95,
+          "recall_at_5": 1.0,
+          "mrr": 0.9625,
+          "latency_p50_ms": 17.609,
+          "latency_p95_ms": 65.5684
+        },
+        "description": {
+          "queries": 20,
+          "recall_at_1": 0.35,
+          "recall_at_5": 0.4667,
+          "mrr": 0.4498,
+          "latency_p50_ms": 20.2116,
+          "latency_p95_ms": 80.386
+        }
+      }
+    }
+  }
+}

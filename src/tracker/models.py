@@ -1,12 +1,15 @@
-"""Data model: shops (DomainRule), tracked products and their price history."""
+"""Data model: shops (DomainRule), tracked products, price history and page text."""
 
 from decimal import Decimal
 
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
+from pgvector.django import HnswIndex, VectorField
 
 from tracker.currencies import validate_currency_code
 from tracker.domains import normalize_domain
@@ -107,6 +110,10 @@ class Product(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        indexes = [
+            # Trigram index for search by name: finds model numbers despite typos.
+            GinIndex(name="product_name_trgm", fields=["name"], opclasses=["gin_trgm_ops"])
+        ]
         verbose_name = "product"
         verbose_name_plural = "products"
 
@@ -143,3 +150,66 @@ class PriceChange(models.Model):
     def __str__(self) -> str:
         old_price = "—" if self.old_price is None else self.old_price
         return f"{self.product}: {old_price} → {self.new_price}"
+
+
+class ProductDocument(models.Model):
+    """Text of a product page kept for retrieval: one document per product."""
+
+    product = models.OneToOneField(
+        Product, on_delete=models.CASCADE, related_name="document", verbose_name="product"
+    )
+    title = models.CharField("title", max_length=255, blank=True)
+    text = models.TextField("text")
+    # SHA-256 of title and text: chunks are rebuilt only when it changes.
+    content_hash = models.CharField("content hash", max_length=64)
+    fetched_at = models.DateTimeField("fetched at")
+
+    class Meta:
+        ordering = ["-fetched_at", "-id"]
+        verbose_name = "product document"
+        verbose_name_plural = "product documents"
+
+    def __str__(self) -> str:
+        return self.title or str(self.product)
+
+
+class Chunk(models.Model):
+    """A piece of a document's text; `ordinal` is its position, starting at 0."""
+
+    document = models.ForeignKey(
+        ProductDocument, on_delete=models.CASCADE, related_name="chunks", verbose_name="document"
+    )
+    ordinal = models.PositiveIntegerField("ordinal")
+    text = models.TextField("text")
+    # Filled in by `manage.py embed_chunks`; NULL until then.
+    embedding = VectorField("embedding", dimensions=384, null=True, blank=True)
+    # Name of the model that produced `embedding`: after a model change the old vectors
+    # are found by this name and replaced.
+    embedding_model = models.CharField("embedding model", max_length=255, blank=True)
+    # Kept up to date by PostgreSQL. The "simple" configuration does no stemming and drops
+    # no stop words: the texts are multilingual and model numbers must stay intact.
+    search_vector = models.GeneratedField(
+        expression=SearchVector("text", config="simple"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+        verbose_name="search vector",
+    )
+
+    class Meta:
+        ordering = ["document_id", "ordinal"]
+        constraints = [
+            models.UniqueConstraint(fields=["document", "ordinal"], name="unique_chunk_ordinal")
+        ]
+        indexes = [
+            HnswIndex(
+                name="chunk_embedding_hnsw",
+                fields=["embedding"],
+                opclasses=["vector_cosine_ops"],
+            ),
+            GinIndex(name="chunk_search_vector_gin", fields=["search_vector"]),
+        ]
+        verbose_name = "chunk"
+        verbose_name_plural = "chunks"
+
+    def __str__(self) -> str:
+        return f"{self.document} #{self.ordinal}"

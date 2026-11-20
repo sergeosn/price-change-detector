@@ -3,7 +3,13 @@
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key")
-os.environ["DATABASE_URL"] = "sqlite://:memory:"
+# pytest-django creates and drops its own "test_<name>" database on this server.
+os.environ["DATABASE_URL"] = (
+    os.environ.get("TEST_DATABASE_URL") or "postgres://pcd:pcd@localhost:5432/pcd"
+)
+
+# Tests use a fake embedder; if one ever reached the real model, it must not be downloaded.
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 from config.settings import *  # noqa: E402, F403
 
@@ -12,4 +18,8 @@ REQUEST_DELAY_MIN = 0.0
 REQUEST_DELAY_MAX = 0.0
 TELEGRAM_BOT_TOKEN = ""
 TELEGRAM_CHAT_ID = ""
+# Tests use a fake answerer; a developer's own LLM settings must not reach a real LLM.
+LLM_BASE_URL = ""
+LLM_AUTH_TOKEN = ""
+LLM_MODEL = ""
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

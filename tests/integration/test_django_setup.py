@@ -1,9 +1,10 @@
-"""Project wiring: settings helpers, SQLite options, Django system checks."""
+"""Project wiring: settings helpers, the PostgreSQL database, Django system checks."""
 
 import pytest
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
+from django.db import connection
 
 from config.settings import env_bool, env_list, env_str
 
@@ -12,11 +13,22 @@ def test_django_system_check_passes():
     call_command("check")
 
 
-def test_sqlite_is_configured_for_two_processes():
-    options = settings.DATABASES["default"]["OPTIONS"]
-    assert options["init_command"] == "PRAGMA journal_mode=WAL;"
-    assert options["timeout"] == 5
-    assert options["transaction_mode"] == "IMMEDIATE"
+def test_database_is_postgresql():
+    assert settings.DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql"
+
+
+@pytest.mark.django_db
+def test_migrations_enable_vector_and_trigram_extensions():
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT extname FROM pg_extension")
+        installed = {row[0] for row in cursor.fetchall()}
+    assert {"vector", "pg_trgm"} <= installed
+
+
+def test_database_url_is_required(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL")
+    with pytest.raises(ImproperlyConfigured, match="DATABASE_URL"):
+        env_str("DATABASE_URL")
 
 
 def test_env_str_requires_value_without_default(monkeypatch):

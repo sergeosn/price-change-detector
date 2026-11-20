@@ -10,12 +10,18 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28",
     "lxml>=5.3",
+    "openai>=3.57.0",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.9",
+    "sentence-transformers>=6.3.0",
     "soupsieve>=2.5",
+    "torch>=2.15.0",
     "uvicorn[standard]>=0.32",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.16.2",
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "pytest-django>=4.9",
@@ -25,6 +31,16 @@ dev = [
 
 [tool.uv]
 package = false
+
+# torch comes from the CPU-only index: the default Linux wheel bundles gigabytes of CUDA
+# libraries. `explicit` keeps every other package on PyPI.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.test_settings"

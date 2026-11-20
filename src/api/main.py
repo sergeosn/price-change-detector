@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.deps import db_connection, require_api_key
-from api.routers import domain_rules, health, products
+from api.routers import ask, domain_rules, health, products, search
+from tracker.services.answerer import AnswererNotConfigured, AnswerError
 from tracker.services.errors import DuplicateError, NotFoundError
 
 API_PREFIX = "/api/v1"
@@ -37,8 +38,12 @@ def create_api() -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX, dependencies=[Depends(db_connection)])
     app.include_router(domain_rules.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(products.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(search.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(ask.router, prefix=API_PREFIX, dependencies=protected)
     app.add_exception_handler(NotFoundError, _not_found_handler)
     app.add_exception_handler(DuplicateError, _duplicate_handler)
+    app.add_exception_handler(AnswererNotConfigured, _answerer_not_configured_handler)
+    app.add_exception_handler(AnswerError, _answer_error_handler)
     return app
 
 
@@ -48,3 +53,12 @@ async def _not_found_handler(request: Request, exc: Exception) -> JSONResponse:
 
 async def _duplicate_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+async def _answerer_not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+async def _answer_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    # The LLM behind the API failed or gave an answer that cannot be used.
+    return JSONResponse(status_code=502, content={"detail": str(exc)})

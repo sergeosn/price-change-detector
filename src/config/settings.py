@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Registers the trigram lookups used by search.
+    "django.contrib.postgres",
     "tracker",
 ]
 
@@ -79,22 +81,7 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {
-    "default": dj_database_url.parse(
-        env_str("DATABASE_URL", f"sqlite:///{PROJECT_DIR / 'data' / 'db.sqlite3'}")
-    )
-}
-if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
-    # The API process and the scheduler write to the same file: WAL lets readers work
-    # during writes, IMMEDIATE transactions take the write lock up front, and the
-    # 5 second timeout is SQLite's busy timeout.
-    DATABASES["default"].setdefault("OPTIONS", {}).update(
-        {
-            "init_command": "PRAGMA journal_mode=WAL;",
-            "timeout": 5,
-            "transaction_mode": "IMMEDIATE",
-        }
-    )
+DATABASES = {"default": dj_database_url.parse(env_str("DATABASE_URL"))}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -120,7 +107,12 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "simple"}},
     "root": {"handlers": ["console"], "level": "INFO"},
     # httpx logs every request URL at INFO, and the Telegram URL contains the bot token.
-    "loggers": {"httpx": {"level": "WARNING"}, "httpcore": {"level": "WARNING"}},
+    # httpx2 is the Hugging Face client: loading the model logs dozens of requests.
+    "loggers": {
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+        "httpx2": {"level": "WARNING"},
+    },
 }
 
 # --- Application settings ---------------------------------------------------------
@@ -134,5 +126,13 @@ REQUEST_DELAY_MIN = env_float("REQUEST_DELAY_MIN", 1.0)
 REQUEST_DELAY_MAX = env_float("REQUEST_DELAY_MAX", 3.0)
 FETCH_TIMEOUT_SECONDS = env_float("FETCH_TIMEOUT_SECONDS", 15.0)
 FETCH_ACCEPT_LANGUAGE = env_str("FETCH_ACCEPT_LANGUAGE", "uk,ru;q=0.9,en;q=0.8")
+# The vector column is 384 wide: a model with other dimensions also needs a migration.
+EMBEDDING_MODEL = env_str("EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
+EMBEDDING_DIMENSIONS = env_int("EMBEDDING_DIMENSIONS", 384)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# OpenAI-compatible LLM (a LiteLLM proxy) that answers questions; /ask returns 503 while
+# any of the three is empty. Only these variables are used, never OPENAI_* or ANTHROPIC_*.
+LLM_BASE_URL = os.environ.get("PCD_LLM_BASE_URL", "")
+LLM_AUTH_TOKEN = os.environ.get("PCD_LLM_AUTH_TOKEN", "")
+LLM_MODEL = os.environ.get("PCD_LLM_MODEL", "")

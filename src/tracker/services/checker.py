@@ -1,4 +1,4 @@
-"""Checking one product: download → extract → compare → record."""
+"""Checking one product: download → extract → compare → record → keep the page text."""
 
 import logging
 from dataclasses import dataclass
@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from notifications.base import Notifier
 from tracker.models import CheckStatus, DomainRule, PriceChange, Product
+from tracker.services.documents import sync_document
 from tracker.services.extractor import ExtractedPrice, ExtractionError, extract_price
 from tracker.services.fetcher import FetchError, PageFetcher
 
@@ -53,6 +54,7 @@ def check_product(
 
     if change is not None:
         _notify(notifier, product, change)
+    _store_page_text(product, html, now)
     return CheckResult(status="ok", price=extracted.amount, changed=change is not None, error=None)
 
 
@@ -92,10 +94,16 @@ def _apply_currency(domain: str, code: str | None) -> None:
 
 
 def _record_price(product: Product, extracted: ExtractedPrice, now: datetime) -> PriceChange | None:
-    # Called inside transaction.atomic(), which holds the SQLite write lock (IMMEDIATE mode).
-    # Re-read the row: `product` may be stale (loaded at the start of a long scheduler pass),
-    # and a manual check or an edit may have changed the price or name since then.
-    fresh = Product.objects.filter(pk=product.pk).values("current_price", "name").first()
+    # Called inside transaction.atomic(). Re-read the row: `product` may be stale (loaded at
+    # the start of a long scheduler pass), and a manual check or an edit may have changed the
+    # price or name since then. The row lock makes a concurrent check of the same product
+    # wait until this one commits, so both compare against the latest recorded price.
+    fresh = (
+        Product.objects.select_for_update()
+        .filter(pk=product.pk)
+        .values("current_price", "name")
+        .first()
+    )
     if fresh is None:
         raise Product.DoesNotExist(f"Product {product.pk} was deleted during the check")
     change = None
@@ -133,6 +141,15 @@ def _record_error(product: Product, message: str, now: datetime) -> CheckResult:
     for field, value in fields.items():
         setattr(product, field, value)
     return CheckResult(status="error", price=None, changed=False, error=message)
+
+
+def _store_page_text(product: Product, html: str, now: datetime) -> None:
+    # The page text is a by-product of the check: the price is already recorded and
+    # committed, and a failure here must not turn the check into an error.
+    try:
+        sync_document(product, html, now)
+    except Exception:
+        logger.exception("Storing the page text of product %s failed", product.pk)
 
 
 def _notify(notifier: Notifier, product: Product, change: PriceChange) -> None:

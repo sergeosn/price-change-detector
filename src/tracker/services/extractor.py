@@ -68,15 +68,22 @@ def parse_price(text: str) -> tuple[Decimal, str | None]:
 # --- strategies ------------------------------------------------------------------
 
 
-def _from_json_ld(soup: BeautifulSoup) -> ExtractedPrice | None:
+def iter_json_ld_products(soup: BeautifulSoup) -> Iterator[dict]:
+    """Every schema.org Product node in the page's JSON-LD blocks, in document order."""
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
         try:
             data = json.loads(script.get_text())
         except ValueError:
             continue
         for node in _walk_json_ld(data):
-            if _is_product(node) and (found := _offer_price(node)):
-                return found
+            if _is_product(node):
+                yield node
+
+
+def _from_json_ld(soup: BeautifulSoup) -> ExtractedPrice | None:
+    for product in iter_json_ld_products(soup):
+        if found := _offer_price(product):
+            return found
     return None
 
 

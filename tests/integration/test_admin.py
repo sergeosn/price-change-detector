@@ -6,15 +6,25 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from tests.helpers import URL, FakeFetcher, FakeNotifier, jsonld_page, make_product
-from tracker.models import CheckStatus, DomainRule, PriceChange
+from tests.helpers import (
+    URL,
+    FakeFetcher,
+    FakeNotifier,
+    jsonld_page,
+    load_fixture,
+    make_product,
+)
+from tracker.models import CheckStatus, Chunk, DomainRule, PriceChange, Product, ProductDocument
+from tracker.services.documents import sync_document
 
 pytestmark = pytest.mark.django_db
 
 PRODUCTS = reverse("admin:tracker_product_changelist")
 
 
-@pytest.mark.parametrize("model", ["product", "domainrule", "pricechange"])
+@pytest.mark.parametrize(
+    "model", ["product", "domainrule", "pricechange", "productdocument", "chunk"]
+)
 def test_changelist_opens(admin_client, model):
     response = admin_client.get(reverse(f"admin:tracker_{model}_changelist"))
     assert response.status_code == 200
@@ -238,3 +248,83 @@ def test_action_button_post_runs_the_action(admin_client):
     )
     product.refresh_from_db()
     assert product.is_active is False
+
+
+@pytest.fixture
+def document() -> ProductDocument:
+    product = make_product(name="Grinder")
+    sync_document(product, load_fixture("content_uk.html"), datetime(2026, 11, 19, tzinfo=UTC))
+    return ProductDocument.objects.get(product=product)
+
+
+def test_document_list_shows_products_with_their_chunk_count(admin_client, document):
+    content = admin_client.get(reverse("admin:tracker_productdocument_changelist")).content.decode()
+    assert "Кавомолка Arabella G55" in content
+    assert '<td class="field-chunk_count">2</td>' in content
+
+
+def test_document_and_chunk_lists_query_count_does_not_grow(admin_client, document):
+    lists = [reverse(f"admin:tracker_{model}_changelist") for model in ("productdocument", "chunk")]
+    with CaptureQueriesContext(connection) as one_document:
+        for url in lists:
+            admin_client.get(url)
+    for index in range(3):
+        product = make_product(url=f"https://shop{index}.example/item")
+        sync_document(product, load_fixture("content_uk.html"), document.fetched_at)
+    with CaptureQueriesContext(connection) as four_documents:
+        for url in lists:
+            admin_client.get(url)
+    assert len(four_documents) == len(one_document)
+
+
+def test_chunk_list_shows_a_short_preview(admin_client, document):
+    content = admin_client.get(reverse("admin:tracker_chunk_changelist")).content.decode()
+    first_chunk = document.chunks.get(ordinal=0)
+    assert first_chunk.text[:100] in content
+    assert first_chunk.text not in content
+
+
+def test_chunk_pages_show_the_embedding_model_but_not_the_vector(admin_client, document):
+    chunk = document.chunks.get(ordinal=0)
+    Chunk.objects.filter(pk=chunk.pk).update(embedding=[0.5] * 384, embedding_model="e5-test")
+
+    for url in (
+        reverse("admin:tracker_chunk_changelist"),
+        reverse("admin:tracker_chunk_change", args=[chunk.pk]),
+    ):
+        content = admin_client.get(url).content.decode()
+        assert "e5-test" in content
+        assert "0.5" not in content
+
+
+def test_document_page_shows_text_and_chunks_read_only(admin_client, document):
+    url = reverse("admin:tracker_productdocument_change", args=[document.pk])
+    content = admin_client.get(url).content.decode()
+    assert "Країна виробництва: Італія" in content
+    assert document.content_hash in content
+    assert "<textarea" not in content
+    assert 'name="_save"' not in content
+
+
+@pytest.mark.parametrize("model", ["productdocument", "chunk"])
+def test_documents_and_chunks_cannot_be_added_or_edited(admin_client, document, model):
+    pk = document.pk if model == "productdocument" else document.chunks.first().pk
+    change_url = reverse(f"admin:tracker_{model}_change", args=[pk])
+
+    assert admin_client.get(reverse(f"admin:tracker_{model}_add")).status_code == 403
+    assert admin_client.get(change_url).status_code == 200
+    assert admin_client.post(change_url, {"title": "Edited", "text": "Edited"}).status_code == 403
+    document.refresh_from_db()
+    assert document.title == "Кавомолка Arabella G55"
+
+
+def test_product_with_a_document_can_be_deleted_in_admin(admin_client, document):
+    url = reverse("admin:tracker_product_delete", args=[document.product_id])
+
+    confirmation = admin_client.get(url).content.decode()
+    assert "Are you sure" in confirmation
+
+    assert admin_client.post(url, {"post": "yes"}).status_code == 302
+    assert not Product.objects.exists()
+    assert not ProductDocument.objects.exists()
+    assert not Chunk.objects.exists()

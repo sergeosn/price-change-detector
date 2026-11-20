@@ -1,12 +1,40 @@
 services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: pcd
+      POSTGRES_USER: pcd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pcd}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pcd -d pcd"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     build: .
     image: price-change-detector:local
     env_file: .env
+    environment: &database
+      DATABASE_URL: postgres://pcd:${POSTGRES_PASSWORD:-pcd}@db:5432/pcd
     ports:
       - "8000:8000"
-    volumes:
+    volumes: &app-volumes
+      # The embedding model is downloaded once and survives image rebuilds.
+      - model-cache:/models
+      # Files the seed, export and eval commands read and write, shared with the host.
       - ./data:/app/data
+      # Labelled search queries for eval_search. Writable: the command writes its numbers
+      # as JSON next to the queries file.
+      - ./evals:/app/evals
+    depends_on: &wait-for-db
+      db:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -24,9 +52,14 @@ services:
     image: price-change-detector:local
     command: ["python", "manage.py", "run_scheduler"]
     env_file: .env
-    volumes:
-      - ./data:/app/data
+    environment: *database
+    volumes: *app-volumes
     depends_on:
+      <<: *wait-for-db
       app:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  model-cache:
