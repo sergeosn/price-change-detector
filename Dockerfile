@@ -12,7 +12,9 @@ RUN uv sync --frozen --no-dev
 FROM python:3.12-slim
 # /models holds the downloaded embedding model. It is created here so that a volume
 # mounted over it starts out owned by the app user.
-RUN useradd --create-home --uid 1000 app && install -d -o app -g app /models
+# /app/data is where the seed, export and eval commands read and write their files;
+# Compose mounts ./data over it, and without a mount the app user can still write there.
+RUN useradd --create-home --uid 1000 app && install -d -o app -g app /models /app/data
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
