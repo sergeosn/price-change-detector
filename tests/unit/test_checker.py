@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from tests.helpers import URL, FakeFetcher, FakeNotifier, css_page, jsonld_page, make_product
 from tracker.models import CheckStatus, DomainRule, PriceChange, Product
@@ -51,6 +53,19 @@ def test_changed_price_appends_history():
     assert result.changed is True
     change = PriceChange.objects.get(product=product)
     assert (change.old_price, change.new_price) == (Decimal("37999.00"), Decimal("34999.00"))
+
+
+def test_price_is_compared_under_a_row_lock():
+    # A scheduler pass and a manual check may record the same product at once: the
+    # second one has to wait for the first and compare against the price it wrote.
+    product = make_product(current_price=Decimal("37999.00"))
+
+    with CaptureQueriesContext(connection) as queries:
+        check(product, jsonld_page("34999", "UAH"))
+
+    locking = [q["sql"] for q in queries if "FOR UPDATE" in q["sql"]]
+    assert len(locking) == 1
+    assert '"tracker_product"' in locking[0]
 
 
 def test_unchanged_price_only_updates_check_time():

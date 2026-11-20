@@ -17,9 +17,9 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY src /app/src
 WORKDIR /app/src
-RUN DJANGO_SECRET_KEY=build-only python manage.py collectstatic --noinput \
-    && mkdir -p /app/data \
-    && chown app:app /app/data
+# collectstatic only needs the settings to import; it never connects to the database.
+RUN DJANGO_SECRET_KEY=build-only DATABASE_URL=postgres://build-only@localhost/build-only \
+    python manage.py collectstatic --noinput
 USER app
 EXPOSE 8000
 CMD ["sh", "-c", "python manage.py migrate --noinput && exec uvicorn config.asgi:app --host 0.0.0.0 --port 8000"]

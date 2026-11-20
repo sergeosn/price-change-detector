@@ -3,7 +3,7 @@
 ## Layout
 
 - `src/config` — Django project: settings, URLs, ASGI entry point. `test_settings.py` is what
-  pytest runs under (in-memory SQLite, fixed API key, notifications off).
+  pytest runs under (PostgreSQL from `TEST_DATABASE_URL`, fixed API key, notifications off).
 - `src/tracker` — the Django app: models, migrations, admin, management commands, and the
   service layer in `tracker/services` (all business logic lives there).
 - `src/api` — FastAPI app: routers, schemas, dependencies (`deps.py`).
@@ -20,7 +20,8 @@ Run all three before calling a change done; CI runs the same commands.
 
 - `uv run ruff check .`
 - `uv run ruff format --check .`
-- `uv run pytest --cov` — CI fails below 85% coverage.
+- `uv run pytest --cov` — CI fails below 85% coverage. Needs PostgreSQL: start it with
+  `docker compose up -d db`.
 
 After any model change, also run
 `DJANGO_SETTINGS_MODULE=config.test_settings uv run python src/manage.py makemigrations --check --dry-run`

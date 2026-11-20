@@ -8,7 +8,9 @@ from tests.helpers import URL, FakeFetcher, FakeNotifier, jsonld_page, make_prod
 from tracker.management.commands.run_scheduler import Command
 from tracker.models import CheckStatus
 
-pytestmark = pytest.mark.django_db
+# A scheduler pass starts with close_old_connections(), which would drop the connection
+# out from under the transaction that a plain django_db test is wrapped in.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture(autouse=True)

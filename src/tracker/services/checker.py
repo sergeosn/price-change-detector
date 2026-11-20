@@ -92,10 +92,16 @@ def _apply_currency(domain: str, code: str | None) -> None:
 
 
 def _record_price(product: Product, extracted: ExtractedPrice, now: datetime) -> PriceChange | None:
-    # Called inside transaction.atomic(), which holds the SQLite write lock (IMMEDIATE mode).
-    # Re-read the row: `product` may be stale (loaded at the start of a long scheduler pass),
-    # and a manual check or an edit may have changed the price or name since then.
-    fresh = Product.objects.filter(pk=product.pk).values("current_price", "name").first()
+    # Called inside transaction.atomic(). Re-read the row: `product` may be stale (loaded at
+    # the start of a long scheduler pass), and a manual check or an edit may have changed the
+    # price or name since then. The row lock makes a concurrent check of the same product
+    # wait until this one commits, so both compare against the latest recorded price.
+    fresh = (
+        Product.objects.select_for_update()
+        .filter(pk=product.pk)
+        .values("current_price", "name")
+        .first()
+    )
     if fresh is None:
         raise Product.DoesNotExist(f"Product {product.pk} was deleted during the check")
     change = None

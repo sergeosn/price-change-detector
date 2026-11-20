@@ -79,22 +79,7 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {
-    "default": dj_database_url.parse(
-        env_str("DATABASE_URL", f"sqlite:///{PROJECT_DIR / 'data' / 'db.sqlite3'}")
-    )
-}
-if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
-    # The API process and the scheduler write to the same file: WAL lets readers work
-    # during writes, IMMEDIATE transactions take the write lock up front, and the
-    # 5 second timeout is SQLite's busy timeout.
-    DATABASES["default"].setdefault("OPTIONS", {}).update(
-        {
-            "init_command": "PRAGMA journal_mode=WAL;",
-            "timeout": 5,
-            "transaction_mode": "IMMEDIATE",
-        }
-    )
+DATABASES = {"default": dj_database_url.parse(env_str("DATABASE_URL"))}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

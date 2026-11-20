@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sergeosn/price-change-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/sergeosn/price-change-detector/actions/workflows/ci.yml)
 
-A personal, self-hosted service that tracks product prices on web pages by URL. A Django admin and a FastAPI REST API share one database and one service layer; a separate scheduler process checks prices once a day and records every change.
+A personal, self-hosted service that tracks product prices on web pages by URL. A Django admin and a FastAPI REST API share one PostgreSQL database and one service layer; a separate scheduler process checks prices once a day and records every change.
 
 ## Demo
 
@@ -29,11 +29,15 @@ A product without structured price data fails its first check; the shop's domain
 └───────────────┬─────────────────────────┘     └────────┬──────────┘
                 │      tracker.services (shared layer)   │
                 └──────────────┬─────────────────────────┘
-                        SQLite (WAL), ./data/db.sqlite3
+                 ┌─────────────┴──────────────┐
+                 │ db: PostgreSQL 17          │
+                 │   + pgvector, pg_trgm      │
+                 └────────────────────────────┘
 ```
 
 - **Django owns the models and migrations**; FastAPI uses the Django ORM, so models are never duplicated.
 - **One service layer** (`src/tracker/services`) is called by the admin, the API and the scheduler.
+- **PostgreSQL with pgvector** is the only supported database. A migration enables the `vector` and `pg_trgm` extensions. The app and the scheduler write concurrently: a check locks the product row (`SELECT … FOR UPDATE`) before comparing prices, so two simultaneous checks cannot record the same change twice.
 - **The code is synchronous.** Django's async ORM still runs queries in threads and cannot use `transaction.atomic()`, so FastAPI endpoints are plain `def` functions executed in a thread pool.
 - Page fetching (`PageFetcher`) and notifications (`Notifier`) sit behind interfaces and are replaced by fakes in tests.
 
@@ -50,16 +54,21 @@ docker compose up -d --build
 docker compose exec app python manage.py createsuperuser
 ```
 
+This starts three services: `db` (PostgreSQL), `app` (applies migrations, then serves the API and the admin) and `scheduler`. `app` and `scheduler` wait until `db` is healthy.
+
 - Admin: http://localhost:8000/admin/
 - API docs: http://localhost:8000/api/docs
 
-The database lives in `./data`. On Linux the containers run as UID 1000; if your UID differs, run `sudo chown 1000:1000 data`.
+The data lives in the `pgdata` Docker volume: `docker compose down` keeps it, `docker compose down -v` deletes it. PostgreSQL is published on `127.0.0.1:5432` only (database and user `pcd`); to change the default password, set `POSTGRES_PASSWORD` in `.env` before the first start.
 
 ## Local development
+
+The code runs on the host and uses the PostgreSQL from Docker Compose; `DATABASE_URL` in `.env.example` already points at it.
 
 ```bash
 uv sync
 cp .env.example .env    # set DJANGO_SECRET_KEY and API_KEY
+docker compose up -d db
 uv run --env-file .env python src/manage.py migrate
 uv run --env-file .env python src/manage.py createsuperuser
 uv run --env-file .env python src/manage.py collectstatic --noinput
@@ -124,9 +133,12 @@ Allowed methods are `GET`, `POST`, `PATCH`, `DELETE`; allowed headers are `X-API
 ## Tests and code quality
 
 ```bash
+docker compose up -d db
 uv run pytest --cov
 uv run ruff check . && uv run ruff format --check .
 ```
+
+Tests run on PostgreSQL: pytest creates and drops its own `test_pcd` database on the Compose `db` service, so development data is not touched. Set `TEST_DATABASE_URL` to use another server (the role must be allowed to create databases and the `vector` extension). CI starts the same `pgvector/pgvector:pg17` image as a service.
 
 Tests never touch the network: page downloads are replaced by fakes or `respx`.
 

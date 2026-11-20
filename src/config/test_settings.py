@@ -3,7 +3,10 @@
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key")
-os.environ["DATABASE_URL"] = "sqlite://:memory:"
+# pytest-django creates and drops its own "test_<name>" database on this server.
+os.environ["DATABASE_URL"] = (
+    os.environ.get("TEST_DATABASE_URL") or "postgres://pcd:pcd@localhost:5432/pcd"
+)
 
 from config.settings import *  # noqa: E402, F403
 

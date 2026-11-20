@@ -87,7 +87,7 @@ class ProductAdmin(admin.ModelAdmin):
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         response = super().changeform_view(request, object_id, form_url, extra_context)
         # The check runs after the admin's own transaction has committed, so the page
-        # download does not hold the SQLite write lock that the scheduler also needs.
+        # download does not keep that transaction and its row locks open.
         product = getattr(request, "_product_to_check", None)
         if product is not None:
             self._check_and_report(request, product)

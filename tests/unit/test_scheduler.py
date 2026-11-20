@@ -5,7 +5,9 @@ import pytest
 from tests.helpers import FakeFetcher, FakeNotifier, jsonld_page, make_product
 from tracker.services.scheduler import PassSummary, run_due_checks
 
-pytestmark = pytest.mark.django_db
+# A scheduler pass starts with close_old_connections(), which would drop the connection
+# out from under the transaction that a plain django_db test is wrapped in.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 NOW = datetime(2026, 10, 12, 3, 0, tzinfo=UTC)
 
