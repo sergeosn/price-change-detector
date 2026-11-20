@@ -7,11 +7,20 @@ from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    StringConstraints,
+    field_validator,
+)
 
 from tracker.currencies import normalize_currency
 from tracker.domains import normalize_domain
 from tracker.models import DomainRule, PriceChange, Product
+from tracker.services.answerer import TokenUsage
+from tracker.services.ask import DEFAULT_LIMIT, AskResult
 from tracker.services.checker import CheckResult
 from tracker.services.search import SearchMode, SearchResult
 
@@ -255,3 +264,74 @@ class SearchResponse(BaseModel):
     query: str
     mode: SearchMode
     items: list[SearchItemOut]
+
+
+class AskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    # How many chunks (one per product) are retrieved and shown to the LLM.
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=20)
+
+
+class AskSourceOut(BaseModel):
+    """A product the answer cites, with the chunk of its page the answer is based on."""
+
+    product_id: int
+    product_name: str
+    product_url: str
+    chunk_id: int
+
+    @classmethod
+    def from_result(cls, result: SearchResult) -> Self:
+        return cls(
+            product_id=result.product.pk,
+            product_name=result.product.name,
+            product_url=result.product.url,
+            chunk_id=result.chunk.pk,
+        )
+
+
+class AskTimingsOut(BaseModel):
+    """Milliseconds. `generation` is 0 when nothing was retrieved and the LLM was not asked."""
+
+    retrieval: float
+    generation: float
+
+
+class TokenUsageOut(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+    @classmethod
+    def from_usage(cls, usage: TokenUsage) -> Self:
+        return cls(
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+        )
+
+
+class AskResponse(BaseModel):
+    question: str
+    # False when the retrieved chunks do not contain the answer: `answer` is then empty
+    # and there are no `sources`.
+    answerable: bool
+    answer: str
+    sources: list[AskSourceOut]
+    timings_ms: AskTimingsOut
+    usage: TokenUsageOut
+
+    @classmethod
+    def from_result(cls, result: AskResult) -> Self:
+        return cls(
+            question=result.question,
+            answerable=result.answerable,
+            answer=result.answer,
+            sources=[AskSourceOut.from_result(source) for source in result.sources],
+            timings_ms=AskTimingsOut(
+                retrieval=round(result.retrieval_ms, 1), generation=round(result.generation_ms, 1)
+            ),
+            usage=TokenUsageOut.from_usage(result.usage),
+        )

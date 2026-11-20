@@ -10,6 +10,7 @@ from pathlib import Path
 from django.utils import timezone
 
 from tracker.models import Chunk, PriceChange, Product, ProductDocument
+from tracker.services.answerer import ContextChunk, Generation, SubmittedAnswer, TokenUsage
 from tracker.services.fetcher import FetchError
 
 URL = "https://shop.example/item/1"
@@ -74,6 +75,33 @@ class FakeEmbedder:
             values = [rng.uniform(-1, 1) for _ in range(self.dimensions)]
         norm = math.sqrt(sum(value * value for value in values))
         return [value / norm for value in values]
+
+
+class FakeAnswerer:
+    """Answerer double: gives `reply` with `usage` and records what it was asked.
+
+    Without a `reply` it answers "Fake answer" and cites the first chunk it was given.
+    """
+
+    def __init__(
+        self,
+        reply: SubmittedAnswer | None = None,
+        usage: TokenUsage | None = None,
+        error: Exception | None = None,
+    ):
+        self.reply = reply
+        self.usage = usage or TokenUsage(prompt_tokens=120, completion_tokens=30, total_tokens=150)
+        self.error = error
+        self.calls: list[tuple[str, list[ContextChunk]]] = []
+
+    def answer(self, question: str, chunks: Sequence[ContextChunk]) -> Generation:
+        self.calls.append((question, list(chunks)))
+        if self.error is not None:
+            raise self.error
+        reply = self.reply or SubmittedAnswer(
+            answerable=True, answer="Fake answer", source_chunk_ids=[chunks[0].chunk_id]
+        )
+        return Generation(answer=reply, usage=self.usage)
 
 
 class FakeClock:

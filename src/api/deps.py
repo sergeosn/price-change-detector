@@ -12,6 +12,7 @@ from fastapi.security import APIKeyHeader
 
 from notifications.base import Notifier
 from notifications.factory import get_notifier
+from tracker.services.answerer import Answerer, get_answerer
 from tracker.services.embedder import Embedder, get_embedder
 from tracker.services.fetcher import PageFetcher, get_fetcher
 
@@ -59,7 +60,13 @@ def get_query_embedder() -> Embedder:
     return get_embedder()
 
 
+def get_question_answerer() -> Answerer:
+    """Raises AnswererNotConfigured (a 503) while the LLM settings are missing."""
+    return get_answerer()
+
+
 PaginationDep = Annotated[Pagination, Depends(pagination)]
 FetcherDep = Annotated[PageFetcher, Depends(get_page_fetcher)]
 NotifierDep = Annotated[Notifier, Depends(get_price_notifier)]
 EmbedderDep = Annotated[Embedder, Depends(get_query_embedder)]
+AnswererDep = Annotated[Answerer, Depends(get_question_answerer)]

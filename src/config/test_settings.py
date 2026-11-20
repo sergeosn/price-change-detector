@@ -18,4 +18,8 @@ REQUEST_DELAY_MIN = 0.0
 REQUEST_DELAY_MAX = 0.0
 TELEGRAM_BOT_TOKEN = ""
 TELEGRAM_CHAT_ID = ""
+# Tests use a fake answerer; a developer's own LLM settings must not reach a real LLM.
+LLM_BASE_URL = ""
+LLM_AUTH_TOKEN = ""
+LLM_MODEL = ""
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

@@ -131,3 +131,8 @@ EMBEDDING_MODEL = env_str("EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
 EMBEDDING_DIMENSIONS = env_int("EMBEDDING_DIMENSIONS", 384)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# OpenAI-compatible LLM (a LiteLLM proxy) that answers questions; /ask returns 503 while
+# any of the three is empty. Only these variables are used, never OPENAI_* or ANTHROPIC_*.
+LLM_BASE_URL = os.environ.get("PCD_LLM_BASE_URL", "")
+LLM_AUTH_TOKEN = os.environ.get("PCD_LLM_AUTH_TOKEN", "")
+LLM_MODEL = os.environ.get("PCD_LLM_MODEL", "")

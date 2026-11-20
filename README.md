@@ -19,6 +19,7 @@ A product without structured price data fails its first check; the shop's domain
 - REST API protected by an `X-API-Key` header, Swagger UI at `/api/docs`.
 - Product page text is stored in chunks with multilingual embeddings (pgvector) for retrieval.
 - Hybrid search over the page text: by meaning (embeddings), by words and model numbers (full-text search, name trigrams), or both.
+- Question answering over the page text: `POST /api/v1/ask` retrieves chunks with the hybrid search and has an LLM answer from them alone, citing the products it used.
 - Price change notifications go through a `Notifier` interface. The default implementation is a no-op; Telegram is used when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set.
 
 ## Architecture
@@ -41,7 +42,7 @@ A product without structured price data fails its first check; the shop's domain
 - **One service layer** (`src/tracker/services`) is called by the admin, the API and the scheduler.
 - **PostgreSQL with pgvector** is the only supported database. A migration enables the `vector` and `pg_trgm` extensions. The app and the scheduler write concurrently: a check locks the product row (`SELECT … FOR UPDATE`) before comparing prices, so two simultaneous checks cannot record the same change twice.
 - **The code is synchronous.** Django's async ORM still runs queries in threads and cannot use `transaction.atomic()`, so FastAPI endpoints are plain `def` functions executed in a thread pool.
-- Page fetching (`PageFetcher`), embeddings (`Embedder`) and notifications (`Notifier`) sit behind interfaces and are replaced by fakes in tests.
+- Page fetching (`PageFetcher`), embeddings (`Embedder`), LLM answers (`Answerer`) and notifications (`Notifier`) sit behind interfaces and are replaced by fakes in tests.
 
 ## Quick start (Docker)
 
@@ -130,6 +131,10 @@ curl -s -X PATCH $API/products/1 -H "X-API-Key: $KEY" -H "Content-Type: applicat
 
 # Search the page text; mode is hybrid (default), lexical or vector
 curl -s -G $API/search -H "X-API-Key: $KEY" --data-urlencode "q=WH-1000XM5" -d mode=hybrid -d limit=10
+
+# Ask a question about the stored pages (needs the PCD_LLM_* settings)
+curl -s -X POST $API/ask -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"question": "How long does the WH-1000XM5 battery last?", "limit": 5}'
 ```
 
 ## Search
@@ -143,6 +148,29 @@ curl -s -G $API/search -H "X-API-Key: $KEY" --data-urlencode "q=WH-1000XM5" -d m
 | `hybrid` | Reciprocal rank fusion of the two rankings: a chunk gets `1 / (60 + rank)` from each. | Sum of both |
 
 Scores are comparable only within one response. Vector and hybrid search need embeddings (`embed_chunks`) and load the embedding model on the first query; lexical search needs neither. A product without stored page text is not found.
+
+## Ask
+
+`POST /api/v1/ask` with `{"question": "...", "limit": 5}` answers a question from the stored page text. `limit` (1–20, default 5) is the number of chunks, one per product, that the hybrid search retrieves and the LLM sees.
+
+```json
+{
+  "question": "How long does the WH-1000XM5 battery last?",
+  "answerable": true,
+  "answer": "Up to 30 hours.",
+  "sources": [
+    {"product_id": 1, "product_name": "Sony WH-1000XM5", "product_url": "https://shop.example/item/1", "chunk_id": 12}
+  ],
+  "timings_ms": {"retrieval": 41.3, "generation": 912.7},
+  "usage": {"prompt_tokens": 640, "completion_tokens": 38, "total_tokens": 678}
+}
+```
+
+- The LLM is an OpenAI-compatible chat completions API, such as a LiteLLM proxy, set with `PCD_LLM_BASE_URL`, `PCD_LLM_AUTH_TOKEN` and `PCD_LLM_MODEL`. Only these are used: `OPENAI_*` and `ANTHROPIC_*` variables of the environment are ignored. While any of the three is empty the endpoint returns `503` and names the missing ones. The token is never logged or put into an error message.
+- The answer is structured: the model has to call one strict function, `submit_answer` with `answerable`, `answer` and `source_chunk_ids`, and its arguments are validated. The model must support forced tool calls.
+- When the retrieved chunks do not contain the answer, `answerable` is `false`, `answer` is empty and there are no `sources`. When nothing is retrieved at all, the LLM is not asked and `generation` is `0`.
+- `sources` are the products of the chunks the answer cites, in the order it cites them. An answer that cites a chunk that was not retrieved, or cites none, is rejected with `502`, and so is a failed LLM call. A failed call is not retried.
+- `timings_ms.retrieval` covers the whole search, the query embedding included; `timings_ms.generation` is the LLM call. `usage` is what the LLM API reports.
 
 ## Search quality
 
@@ -225,7 +253,7 @@ uv run ruff check . && uv run ruff format --check .
 
 Tests run on PostgreSQL: pytest creates and drops its own `test_pcd` database on the Compose `db` service, so development data is not touched. Set `TEST_DATABASE_URL` to use another server (the role must be allowed to create databases and the `vector` extension). CI starts the same `pgvector/pgvector:pg17` image as a service.
 
-Tests never touch the network: page downloads are replaced by fakes or `respx`, and embeddings by a fake embedder, so no model is ever downloaded.
+Tests never touch the network: page downloads are replaced by fakes or `respx`, embeddings by a fake embedder, so no model is ever downloaded, and the LLM by a fake answerer or a mock transport.
 
 ## Project layout
 
